@@ -1,0 +1,16 @@
+employee_id,manager_id,department,role,tenure_months,level,hire_date,location,employment_status,team_id
+EMP001,,Executive,CEO,48,1,2020-01-01,Headquarters,Full-time,TEAM1
+EMP002,EMP001,Engineering,CTO,45,2,2020-04-01,Headquarters,Full-time,TEAM2
+EMP003,EMP001,Marketing,CMO,42,2,2020-07-01,Headquarters,Full-time,TEAM3
+EMP004,EMP001,Sales,CSO,40,2,2020-09-01,Headquarters,Full-time,TEAM4
+EMP005,EMP001,Finance,CFO,36,2,2021-01-01,Headquarters,Full-time,TEAM5
+EMP006,EMP002,Engineering,Lead Developer,24,3,2022-01-01,Headquarters,Full-time,TEAM2
+EMP007,EMP002,Engineering,QA Lead,22,3,2022-03-01,Headquarters,Full-time,TEAM2
+EMP008,EMP003,Marketing,Digital Marketing Manager,20,3,2022-05-01,Remote,Full-time,TEAM3
+EMP009,EMP004,Sales,Regional Sales Manager,18,3,2022-07-01,Office A,Full-time,TEAM4
+EMP010,EMP005,Finance,Financial Analyst,16,3,2022-09-01,Headquarters,Full-time,TEAM5
+EMP011,EMP006,Engineering,Software Engineer,12,4,2023-01-01,Headquarters,Full-time,TEAM2
+EMP012,EMP006,Engineering,Software Engineer,10,4,2023-03-01,Remote,Full-time,TEAM2
+EMP013,EMP007,Engineering,QA Engineer,8,4,2023-05-01,Headquarters,Full-time,TEAM2
+EMP014,EMP008,Marketing,Content Creator,6,4,2023-07-01,Remote,Full-time,TEAM3
+EMP015,EMP009,Sales,Account Executive,4,4,2023-09-01,Office A,Full-time,TEAM4

@@ -1,0 +1,51 @@
+employee_id,manager_id,department,role,tenure_months,level,hire_date,location,employment_status,team_id
+1,,Executive,CEO,48,1,2020-01-01,HQ,Full-time,1
+2,1,Engineering,CTO,45,2,2020-04-01,HQ,Full-time,2
+3,1,Sales,Sales Director,42,2,2020-07-01,HQ,Full-time,3
+4,1,Finance,CFO,40,2,2020-09-01,HQ,Full-time,4
+5,1,HR,HR Director,36,2,2021-01-01,HQ,Full-time,5
+6,2,Engineering,Engineering Manager,36,3,2021-01-01,HQ,Full-time,6
+7,2,Engineering,Engineering Manager,32,3,2021-05-01,HQ,Full-time,7
+8,2,Engineering,QA Manager,30,3,2021-07-01,HQ,Full-time,8
+9,3,Sales,Regional Manager,30,3,2021-07-01,Office A,Full-time,9
+10,3,Sales,Regional Manager,28,3,2021-09-01,Office B,Full-time,10
+11,3,Sales,Regional Manager,24,3,2022-01-01,Office C,Full-time,11
+12,4,Finance,Accounting Manager,24,3,2022-01-01,HQ,Full-time,12
+13,4,Finance,Financial Analyst,20,3,2022-05-01,HQ,Full-time,13
+14,5,HR,Talent Acquisition,18,3,2022-07-01,HQ,Full-time,14
+15,5,HR,People Operations,16,3,2022-09-01,HQ,Full-time,15
+16,6,Engineering,Senior Developer,24,4,2022-01-01,HQ,Full-time,6
+17,6,Engineering,Senior Developer,20,4,2022-05-01,HQ,Full-time,6
+18,6,Engineering,Developer,15,4,2022-10-01,HQ,Full-time,6
+19,6,Engineering,Developer,12,4,2023-01-01,HQ,Full-time,6
+20,7,Engineering,Senior Developer,22,4,2022-03-01,HQ,Full-time,7
+21,7,Engineering,DevOps Engineer,18,4,2022-07-01,HQ,Full-time,7
+22,7,Engineering,Developer,10,4,2023-03-01,HQ,Full-time,7
+23,7,Engineering,Developer,8,4,2023-05-01,HQ,Full-time,7
+24,8,Engineering,QA Lead,24,4,2022-01-01,HQ,Full-time,8
+25,8,Engineering,QA Engineer,18,4,2022-07-01,HQ,Full-time,8
+26,8,Engineering,QA Engineer,12,4,2023-01-01,HQ,Full-time,8
+27,9,Sales,Account Executive,24,4,2022-01-01,Office A,Full-time,9
+28,9,Sales,Account Executive,18,4,2022-07-01,Office A,Full-time,9
+29,9,Sales,Sales Representative,12,4,2023-01-01,Office A,Full-time,9
+30,9,Sales,Sales Representative,6,4,2023-07-01,Office A,Full-time,9
+31,10,Sales,Account Executive,20,4,2022-05-01,Office B,Full-time,10
+32,10,Sales,Account Executive,16,4,2022-09-01,Office B,Full-time,10
+33,10,Sales,Sales Representative,10,4,2023-03-01,Office B,Full-time,10
+34,10,Sales,Sales Representative,6,4,2023-07-01,Office B,Full-time,10
+35,11,Sales,Account Executive,18,4,2022-07-01,Office C,Full-time,11
+36,11,Sales,Account Executive,14,4,2022-11-01,Office C,Full-time,11
+37,11,Sales,Sales Representative,8,4,2023-05-01,Office C,Full-time,11
+38,11,Sales,Sales Representative,4,4,2023-09-01,Office C,Full-time,11
+39,12,Finance,Accountant,20,4,2022-05-01,HQ,Full-time,12
+40,12,Finance,Accountant,16,4,2022-09-01,HQ,Full-time,12
+41,12,Finance,Accounts Payable,10,4,2023-03-01,HQ,Full-time,12
+42,13,Finance,Senior Financial Analyst,18,4,2022-07-01,HQ,Full-time,13
+43,13,Finance,Financial Analyst,12,4,2023-01-01,HQ,Full-time,13
+44,13,Finance,Financial Analyst,8,4,2023-05-01,HQ,Full-time,13
+45,14,HR,Senior Recruiter,16,4,2022-09-01,HQ,Full-time,14
+46,14,HR,Recruiter,10,4,2023-03-01,HQ,Full-time,14
+47,14,HR,Recruiter Assistant,5,4,2023-08-01,HQ,Full-time,14
+48,15,HR,HR Business Partner,14,4,2022-11-01,HQ,Full-time,15
+49,15,HR,HR Administrator,9,4,2023-04-01,HQ,Full-time,15
+50,15,HR,HR Assistant,4,4,2023-09-01,HQ,Full-time,15
