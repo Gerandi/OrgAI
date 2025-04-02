@@ -12,8 +12,12 @@ class ResearchProject(BaseModel):
     status = Column(String, default="active") # active, completed, archived
     visibility = Column(String, default="private") # private, organization, public
 
+    organization_id = Column(Integer, ForeignKey("organizations.id"))
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True) # Research can be org-level or team-level
     # Relationships
     users = relationship("UserProject", back_populates="project")
+    organization = relationship("Organization", back_populates="research_projects")
+    team = relationship("Team", back_populates="research_projects")
     datasets = relationship("Dataset", back_populates="project")
     models = relationship("Model", back_populates="project")
     simulations = relationship("Simulation", back_populates="project")

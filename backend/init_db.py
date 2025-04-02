@@ -38,6 +38,21 @@ def init_db():
             print("Database already contains users")
             demo_user = user
 
+
+        # Create a demo organization if none exists
+        demo_org = db.query(Organization).first()
+        if not demo_org:
+            demo_org = Organization(
+                name="Demo Org",
+                description="Default organization for demo purposes"
+            )
+            db.add(demo_org)
+            db.commit()
+            db.refresh(demo_org)
+            print("Created demo organization")
+        else:
+            print("Database already contains organizations")
+
         # Create a demo project for testing
         if not db.query(ResearchProject).first():
             demo_project = ResearchProject(
@@ -45,6 +60,7 @@ def init_db():
                 description="Analyzing communication patterns and their impact on team performance",
                 status="active",
                 visibility="private"
+                , organization_id=demo_org.id # Assign the demo organization
             )
             db.add(demo_project)
             db.commit()

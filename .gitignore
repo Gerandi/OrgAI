@@ -66,3 +66,7 @@ yarn-error.log*
 # Logs
 logs/
 *.log
+
+# User Uploads / Data
+/backend/app/data/*
+!/backend/app/data/.gitkeep
