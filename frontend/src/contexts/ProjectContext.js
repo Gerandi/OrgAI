@@ -47,7 +47,13 @@ export const ProjectProvider = ({ children }) => {
       setProjects(response.data);
     } catch (err) {
       console.error('Error loading projects:', err);
-      setError('Could not load projects');
+      // Format error properly to ensure it's a string, not an object
+      const errorMessage = err.response?.data?.detail 
+        ? (typeof err.response.data.detail === 'object' 
+            ? JSON.stringify(err.response.data.detail) 
+            : err.response.data.detail)
+        : 'Could not load projects';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -78,7 +84,13 @@ export const ProjectProvider = ({ children }) => {
       return newProject;
     } catch (err) {
       console.error('Error creating project:', err);
-      setError('Could not create project');
+      // Format error properly to ensure it's a string, not an object
+      const errorMessage = err.response?.data?.detail 
+        ? (typeof err.response.data.detail === 'object' 
+            ? JSON.stringify(err.response.data.detail) 
+            : err.response.data.detail)
+        : 'Could not create project';
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);

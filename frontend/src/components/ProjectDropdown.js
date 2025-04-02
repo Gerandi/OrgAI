@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useProject } from '../contexts/ProjectContext';
-import { ChevronDown, FolderPlus } from 'lucide-react';
+import { ChevronDown, FolderPlus, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const ProjectDropdown = () => {
@@ -36,33 +36,40 @@ const ProjectDropdown = () => {
 
   return (
     <div className="relative" ref={dropdownRef}>
+      {/* Improved dropdown button with better visual styling */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white rounded-md"
+        className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-white bg-gray-700 hover:bg-gray-600 rounded-md shadow-sm border border-gray-600"
       >
         <span className="truncate">{getDisplayName()}</span>
         <ChevronDown size={16} className={`ml-2 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 mt-1 w-full bg-gray-700 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
+        <div className="absolute left-0 mt-1 w-full bg-gray-700 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto border border-gray-600">
           <div className="py-1">
-            {/* Option for "No Project" */}
+            {/* Option for "No Project" with improved styling */}
             <button
               onClick={() => {
                 selectProject(null);
                 setIsOpen(false);
               }}
-              className={`w-full text-left px-3 py-2 text-sm ${
+              className={`w-full text-left px-3 py-2 text-sm flex items-center ${
                 !activeProject 
                   ? 'bg-gray-600 text-white' 
                   : 'text-gray-300 hover:bg-gray-600 hover:text-white'
               }`}
             >
-              No Project
+              <div className="flex-shrink-0 w-4 mr-2">
+                {!activeProject && <Check size={16} className="text-blue-400" />}
+              </div>
+              <div>
+                <div className="font-medium">No Project</div>
+                <div className="text-xs text-gray-400">Work with personal data only</div>
+              </div>
             </button>
 
-            {/* List of projects */}
+            {/* List of projects with improved styling */}
             {projects.map((project) => (
               <button
                 key={project.id}
@@ -70,13 +77,21 @@ const ProjectDropdown = () => {
                   selectProject(project);
                   setIsOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 text-sm truncate ${
+                className={`w-full text-left px-3 py-2 text-sm flex items-center ${
                   activeProject?.id === project.id
                     ? 'bg-gray-600 text-white'
                     : 'text-gray-300 hover:bg-gray-600 hover:text-white'
                 }`}
               >
-                {project.title}
+                <div className="flex-shrink-0 w-4 mr-2">
+                  {activeProject?.id === project.id && <Check size={16} className="text-blue-400" />}
+                </div>
+                <div>
+                  <div className="font-medium truncate">{project.title}</div>
+                  {project.description && (
+                    <div className="text-xs text-gray-400 truncate">{project.description}</div>
+                  )}
+                </div>
               </button>
             ))}
 

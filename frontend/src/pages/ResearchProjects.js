@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, PlusCircle, Clock, CheckCircle, Archive, ChevronRight } from 'lucide-react';
 import api from '../services/api';
 import { useProject } from '../contexts/ProjectContext';
-import ProjectSelection from '../components/ProjectSelection';
 import OrganizationProjectFilter from '../components/research/OrganizationProjectFilter'; // Import the filter
 import Loading from '../components/ui/Loading'; // Assuming Loading component exists
 import Alert from '../components/ui/Alert'; // Assuming Alert component exists
@@ -68,10 +67,7 @@ const ResearchProjects = () => {
 
       {error && <Alert type="error" message={error} />}
 
-      {/* Project Selection Component */}
-      <div className="mb-6">
-        <ProjectSelection />
-      </div>
+      {/* Removed ProjectSelection Component */}
 
       {/* Add the Organization Filter */}
       <OrganizationProjectFilter />
