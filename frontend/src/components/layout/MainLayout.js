@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { BarChart2, PlayCircle, Network, Upload, FileText, Settings, LogOut, Menu, X, User } from 'lucide-react'; // Added User icon
+import { BarChart2, PlayCircle, Network, Upload, FileText, Settings, LogOut, Menu, X, User, FolderOpen } from 'lucide-react';
 import { useAuth } from '../../services/auth';
 import { useProject } from '../../contexts/ProjectContext';
-import ProjectSelection from '../ProjectSelection'; // Import the ProjectSelection component
+import ProjectDropdown from '../ProjectDropdown'; // Import the ProjectDropdown component
+import ProjectHeader from '../ProjectHeader';
 
 const MainLayout = () => {
   const { user, logout } = useAuth();
@@ -80,8 +81,13 @@ const MainLayout = () => {
               <h1 className="text-white font-bold text-xl">OrgAI Platform</h1>
             </div>
 
+            {/* Project Dropdown */}
+            <div className="px-2 pt-2">
+              <ProjectDropdown />
+            </div>
+
             {/* Navigation */}
-            <div className="flex-1 flex flex-col overflow-y-auto pt-5 pb-4"> {/* Added pt-5 */}
+            <div className="flex-1 flex flex-col overflow-y-auto pt-3 pb-4">
               <nav className="flex-1 px-2 space-y-1">
                 {navigation.map((item) => (
                   <NavItem key={item.name} item={item} />
@@ -127,12 +133,11 @@ const MainLayout = () => {
         </div>
 
         {/* Main content */}
-        <div className="flex-1 overflow-auto flex flex-col"> {/* Added flex flex-col */}
-           {/* Add ProjectSelection above the main content area */}
-           <div className="p-4 md:px-6 md:pt-6 border-b bg-white shadow-sm sticky top-0 z-5"> {/* Make it sticky */}
-               <ProjectSelection />
-           </div>
-          <main className="p-4 md:p-6 flex-grow"> {/* Added flex-grow */}
+        <div className="flex-1 overflow-auto flex flex-col">
+          {/* Project Header Bar */}
+          <ProjectHeader />
+          
+          <main className="p-4 md:p-6 flex-grow">
             <Outlet />
           </main>
         </div>

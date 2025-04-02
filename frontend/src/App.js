@@ -60,7 +60,8 @@ isAuthenticated ? (
 <Route path="simulation" element={<SimulationPage />} /> 
 <Route path="data-import" element={<DataImport />} /> 
 <Route path="network" element={<NetworkAnalysis />} /> 
-<Route path="research" element={<ResearchProjects />} /> 
+<Route path="research" element={<ResearchProjects />} />
+<Route path="projects" element={<ResearchProjects />} /> {/* Alias for research projects */} 
 <Route path="research/:projectId" element={<ProjectDetail />} /> 
 <Route path="model-builder" element={<ModelBuilder />} /> 
 <Route path="profile" element={<Profile />} /> 
