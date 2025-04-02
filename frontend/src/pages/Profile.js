@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Mail, UserCheck, Users, Building } from 'lucide-react';
 import { useAuth } from '../services/auth';
-import api from '../services/api';
-import profileService from '../services/profile'; // Assuming profile service exists
-import OrganizationsList from '../components/ui/OrganizationsList'; // Assuming component exists
-import TeamsList from '../components/ui/TeamsList'; // Assuming component exists
+import api from '../services/api'; // Keep this if used directly, like for updateUserProfile
+import profileService from '../services/profile';
+import OrganizationsList from '../components/ui/OrganizationsList';
+import TeamsList from '../components/ui/TeamsList';
 
 const ProfilePage = () => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth(); // Assuming useAuth provides logout
   const [profile, setProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -22,19 +22,25 @@ const ProfilePage = () => {
   const [organizations, setOrganizations] = useState([]);
   const [teams, setTeams] = useState([]);
   const [activeTab, setActiveTab] = useState('profile'); // profile, organizations, teams
+  const [dataLoading, setDataLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      fetchProfile();
-      fetchOrganizations();
-      fetchTeams();
+    if (user && user.id) { // Make sure user object is populated
+        fetchProfile();
+        fetchOrganizations();
+        fetchTeams();
+    } else if (!authLoading) {
+        // If auth is not loading but user is null, might indicate an issue or logged out state
+        setDataLoading(false);
     }
-  }, [user]);
+  }, [user, authLoading]); // Depend on user and authLoading
 
   const fetchProfile = async () => {
+    setDataLoading(true);
     try {
-      const response = await api.get('/users/me');
+      // Use profileService if available, otherwise use api directly
+      const response = await (profileService.getUserProfile ? profileService.getUserProfile() : api.get('/users/me'));
       setProfile(response.data);
       setFormData({
         full_name: response.data.full_name || '',
@@ -42,9 +48,17 @@ const ProfilePage = () => {
         password: '',
         confirmPassword: ''
       });
+      setError(null); // Clear previous errors on successful fetch
     } catch (err) {
       console.error('Error fetching profile:', err);
       setError('Failed to load profile information');
+      // If profile fetch fails (e.g., 401), log out the user
+      if (err.response && err.response.status === 401) {
+        logout();
+        navigate('/login');
+      }
+    } finally {
+      // Consider setting dataLoading false after all fetches complete
     }
   };
 
@@ -54,6 +68,9 @@ const ProfilePage = () => {
       setOrganizations(response.data);
     } catch (err) {
       console.error('Error fetching organizations:', err);
+      // Don't set a general error message here, maybe log or show specific warning
+    } finally {
+      // Consider setting dataLoading false after all fetches complete
     }
   };
 
@@ -63,6 +80,10 @@ const ProfilePage = () => {
       setTeams(response.data);
     } catch (err) {
       console.error('Error fetching teams:', err);
+      // Don't set a general error message here
+    } finally {
+      // Set loading false after all data fetches are initiated or completed
+      setDataLoading(false);
     }
   };
 
@@ -95,30 +116,42 @@ const ProfilePage = () => {
         updateData.password = formData.password;
       }
 
-      await api.put('/users/me', updateData);
+      // Use profileService if available, otherwise use api directly
+      await (profileService.updateUserProfile ? profileService.updateUserProfile(updateData) : api.put('/users/me', updateData));
       setSuccess('Profile updated successfully');
       setIsEditing(false);
-      fetchProfile(); // Reload profile data
+      await fetchProfile(); // Reload profile data to reflect changes
+      // Clear password fields after successful update
+      setFormData(prev => ({ ...prev, password: '', confirmPassword: ''}));
     } catch (err) {
       console.error('Error updating profile:', err);
       setError(err.response?.data?.detail || 'Failed to update profile');
     }
   };
 
-  const navigateToOrganization = (orgId) => {
-    navigate(`/organizations/${orgId}`);
-  };
-
-  const navigateToTeam = (teamId) => {
-    navigate(`/teams/${teamId}`);
-  };
-
-  if (loading || !profile) {
+  // Use authLoading OR dataLoading to show loading state
+  if (authLoading || dataLoading) {
     return (
       <div className="flex justify-center items-center h-full p-8">
-        <div className="loader">Loading...</div> {/* Replace with actual Loading component if available */}
+        <div className="loader">Loading...</div> {/* Replace with a proper spinner/loader component */}
       </div>
     );
+  }
+
+  // If not loading and no profile (could be due to error or not logged in)
+  if (!profile) {
+     return (
+       <div className="container mx-auto px-4 py-6 text-center">
+         <h1 className="text-2xl font-bold mb-6">My Profile</h1>
+         <p className="text-red-600">{error || "Could not load profile data. Please try logging in again."}</p>
+          <button
+            onClick={() => navigate('/login')}
+            className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Go to Login
+          </button>
+       </div>
+     );
   }
 
   return (
@@ -126,9 +159,9 @@ const ProfilePage = () => {
       <h1 className="text-2xl font-bold mb-6">My Profile</h1>
 
       {/* Tabs */}
-      <div className="flex border-b mb-6">
+      <div className="flex border-b mb-6 overflow-x-auto">
         <button
-          className={`px-4 py-2 font-medium ${activeTab === 'profile'
+          className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'profile'
             ? 'border-b-2 border-blue-500 text-blue-600'
             : 'text-gray-500 hover:text-gray-700'}`}
           onClick={() => setActiveTab('profile')}
@@ -139,7 +172,7 @@ const ProfilePage = () => {
           </div>
         </button>
         <button
-          className={`px-4 py-2 font-medium ${activeTab === 'organizations'
+          className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'organizations'
             ? 'border-b-2 border-blue-500 text-blue-600'
             : 'text-gray-500 hover:text-gray-700'}`}
           onClick={() => setActiveTab('organizations')}
@@ -150,7 +183,7 @@ const ProfilePage = () => {
           </div>
         </button>
         <button
-          className={`px-4 py-2 font-medium ${activeTab === 'teams'
+          className={`px-4 py-2 font-medium whitespace-nowrap ${activeTab === 'teams'
             ? 'border-b-2 border-blue-500 text-blue-600'
             : 'text-gray-500 hover:text-gray-700'}`}
           onClick={() => setActiveTab('teams')}
@@ -162,16 +195,17 @@ const ProfilePage = () => {
         </button>
       </div>
 
+      {/* Profile Tab Content */}
       {activeTab === 'profile' && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6 max-w-2xl mx-auto">
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4" role="alert">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4" role="alert">
               {success}
             </div>
           )}
@@ -187,7 +221,8 @@ const ProfilePage = () => {
                   type="text"
                   value={profile.username}
                   disabled
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight bg-gray-100"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight bg-gray-100 cursor-not-allowed"
+                  aria-readonly="true"
                 />
                 <p className="text-gray-500 text-xs mt-1">Username cannot be changed</p>
               </div>
@@ -202,7 +237,7 @@ const ProfilePage = () => {
                   type="text"
                   value={formData.full_name}
                   onChange={handleChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -216,13 +251,14 @@ const ProfilePage = () => {
                   type="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
               </div>
 
               <div className="mb-4">
                 <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
-                  New Password (leave blank to keep current)
+                  New Password <span className="text-gray-500 text-xs">(leave blank to keep current)</span>
                 </label>
                 <input
                   id="password"
@@ -230,7 +266,8 @@ const ProfilePage = () => {
                   type="password"
                   value={formData.password}
                   onChange={handleChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoComplete="new-password"
                 />
               </div>
 
@@ -244,21 +281,33 @@ const ProfilePage = () => {
                   type="password"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoComplete="new-password"
+                  disabled={!formData.password} // Disable if password field is empty
                 />
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => setIsEditing(false)}
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2"
+                  onClick={() => {
+                      setIsEditing(false);
+                      setError(null); // Clear errors on cancel
+                      // Reset form data to original profile values
+                      setFormData({
+                          full_name: profile.full_name || '',
+                          email: profile.email || '',
+                          password: '',
+                          confirmPassword: ''
+                      });
+                  }}
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   Save Changes
                 </button>
@@ -269,34 +318,34 @@ const ProfilePage = () => {
               <div className="flex justify-end mb-4">
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   Edit Profile
                 </button>
               </div>
 
-              <div className="mb-6">
-                <div className="flex items-center mb-4">
-                  <User className="w-5 h-5 mr-3 text-gray-500" />
+              <div className="space-y-4">
+                <div className="flex items-center">
+                  <User className="w-5 h-5 mr-3 text-gray-500 flex-shrink-0" />
                   <div>
                     <p className="text-sm text-gray-500">Username</p>
-                    <p className="font-medium">{profile.username}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center mb-4">
-                  <UserCheck className="w-5 h-5 mr-3 text-gray-500" />
-                  <div>
-                    <p className="text-sm text-gray-500">Full Name</p>
-                    <p className="font-medium">{profile.full_name || 'Not provided'}</p>
+                    <p className="font-medium text-gray-900">{profile.username}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center">
-                  <Mail className="w-5 h-5 mr-3 text-gray-500" />
+                  <UserCheck className="w-5 h-5 mr-3 text-gray-500 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm text-gray-500">Full Name</p>
+                    <p className="font-medium text-gray-900">{profile.full_name || <span className="italic text-gray-400">Not provided</span>}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center">
+                  <Mail className="w-5 h-5 mr-3 text-gray-500 flex-shrink-0" />
                   <div>
                     <p className="text-sm text-gray-500">Email</p>
-                    <p className="font-medium">{profile.email}</p>
+                    <p className="font-medium text-gray-900">{profile.email}</p>
                   </div>
                 </div>
               </div>
@@ -305,12 +354,14 @@ const ProfilePage = () => {
         </div>
       )}
 
+      {/* Organizations Tab Content */}
       {activeTab === 'organizations' && (
         <OrganizationsList organizations={organizations} />
       )}
 
+      {/* Teams Tab Content */}
       {activeTab === 'teams' && (
-         <TeamsList teams={teams} />
+        <TeamsList teams={teams} />
       )}
     </div>
   );
