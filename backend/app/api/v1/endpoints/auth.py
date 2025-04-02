@@ -33,9 +33,9 @@ def login_access_token(
     token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    )print(f"Generated token for user: {user.username}")
+    print(f"Generated token for user: {user.username}")
     return {
-        "access_token": token
+        "access_token": token,
         "token_type": "bearer",
     }
 
