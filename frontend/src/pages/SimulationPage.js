@@ -6,6 +6,9 @@ import { useProject } from '../contexts/ProjectContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import SimulationControls from '../components/simulation/SimulationControls';
 import SimulationResults from '../components/simulation/SimulationResults';
+import ModelExplainer from '../components/simulation/explainability/ModelExplainer';
+import CommunityDetection from '../components/simulation/communities/CommunityDetection';
+import ParameterGuidance from '../components/simulation/parameters/ParameterGuidance';
 import { extractSimulationParameters } from '../utils/networkAnalysis';
 import { normalizeSimulationData } from '../utils/numberFormat';
 
@@ -68,6 +71,12 @@ if (extractedParams) {
 setSimParams(prev => ({ ...prev, ...extractedParams }));
 setSuccess('Simulation parameters configured from network analysis');
 }
+};
+
+// Apply recommended parameters from the parameter guidance component
+const applyRecommendedParameters = (newParams) => {
+setSimParams(prev => ({ ...prev, ...newParams }));
+setSuccess('Applied recommended parameters');
 };
 
 // When component loads, get available datasets
@@ -857,6 +866,13 @@ fetchNetworkData(dataset.id);
 </div>
 )}
 
+{/* Parameter Guidance Component */}
+<ParameterGuidance 
+  datasetId={selectedDataset} 
+  currentParams={simParams}
+  onApplyParams={applyRecommendedParameters}
+/>
+
 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 {/* Simulation Controls */}
 <SimulationControls
@@ -883,6 +899,19 @@ exportSimulation={exportSimulation}
 className="lg:col-span-2 bg-white rounded-lg shadow"
 />
 </div>
+
+{/* Model Explainer Component */}
+{selectedModel && simulationId && (
+  <ModelExplainer 
+    simulationId={simulationId} 
+    selectedModel={selectedModel} 
+  />
+)}
+
+{/* Community Detection Component */}
+{simulationId && simulationData.length > 3 && (
+  <CommunityDetection simulationId={simulationId} />
+)}
 </div>
 );
 };

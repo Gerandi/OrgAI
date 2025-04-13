@@ -4,6 +4,7 @@ import api from '../services/api';
 import { useProject } from '../contexts/ProjectContext';
 import { useNavigate } from 'react-router-dom';
 import withProjectRequired from '../hoc/withProjectRequired';
+import FeatureIdentifier from '../components/data/features/FeatureIdentifier';
 
 const DataImport = () => {
   const navigate = useNavigate();
@@ -31,6 +32,9 @@ const DataImport = () => {
     communication: null,
     performance: null
   });
+  
+  // State to track selected dataset for feature identification
+  const [selectedDatasetForFeatures, setSelectedDatasetForFeatures] = useState(null);
 
   // Refresh datasets when active project changes
   useEffect(() => {
@@ -219,6 +223,11 @@ const DataImport = () => {
           if (fileType === 'organization' || fileType === 'communication' || fileType === 'performance') {
             handleDatasetSelection(fileType, justUploadedDataset.id);
           }
+          
+          // Auto-select for feature identification if it's 'custom' or any new dataset
+          if (fileType === 'custom' || activeTab === 'uploaded') {
+            setSelectedDatasetForFeatures(justUploadedDataset.id);
+          }
         }
       }, 500);
 
@@ -402,6 +411,9 @@ const DataImport = () => {
       // Store the processed dataset ID for later use
       const newProcessedDatasetId = response.data.dataset_id;
       setProcessedDatasetId(newProcessedDatasetId);
+      
+      // Set the processed dataset for feature identification
+      setSelectedDatasetForFeatures(newProcessedDatasetId);
 
       // Add a small delay to ensure database has time to complete the transaction
       setTimeout(() => {
@@ -478,6 +490,12 @@ const DataImport = () => {
     } finally {
       setProcessingDataset(false);
     }
+  };
+
+  // Handle feature identification results
+  const handleFeatureIdentified = (results) => {
+    console.log('Feature identification complete:', results);
+    // Could update UI state based on the results if needed
   };
 
   return (
@@ -853,15 +871,22 @@ const DataImport = () => {
 
                   // Check if this dataset is selected
                   const isSelected = selectedDatasets[datasetType] === dataset.id;
+                  // Check if this dataset is selected for feature identification
+                  const isSelectedForFeatures = selectedDatasetForFeatures === dataset.id;
 
                   return (
-                    <tr key={dataset.id} className={isSelected ? 'bg-blue-50' : (isProcessed ? 'bg-purple-50' : '')}>
+                    <tr key={dataset.id} className={isSelectedForFeatures ? 'bg-green-50' : (isSelected ? 'bg-blue-50' : (isProcessed ? 'bg-purple-50' : ''))}>
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-900">
                           {dataset.name}
                           {isProcessed && (
                             <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
                               Processed
+                            </span>
+                          )}
+                          {isSelectedForFeatures && (
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                              Selected for Features
                             </span>
                           )}
                         </div>
@@ -906,6 +931,12 @@ const DataImport = () => {
                             </button>
                           )}
                           <button
+                            className={`px-2 py-1 text-white rounded ${isSelectedForFeatures ? 'bg-green-600' : 'bg-gray-400 hover:bg-green-500'}`}
+                            onClick={() => setSelectedDatasetForFeatures(isSelectedForFeatures ? null : dataset.id)}
+                          >
+                            {isSelectedForFeatures ? 'Analyze' : 'Features'}
+                          </button>
+                          <button
                             className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
                             onClick={() => handleExportDataset(dataset.id)}
                           >
@@ -923,6 +954,11 @@ const DataImport = () => {
                                     // If this dataset was selected, unselect it
                                     if (selectedDatasets[datasetType] === dataset.id) {
                                       handleDatasetSelection(datasetType, null);
+                                    }
+                                    
+                                    // If this dataset was selected for feature identification, unselect it
+                                    if (selectedDatasetForFeatures === dataset.id) {
+                                      setSelectedDatasetForFeatures(null);
                                     }
                                   })
                                   .catch(err => {
@@ -1229,6 +1265,14 @@ const DataImport = () => {
           </div>
         </div>
       </div>
+      
+      {/* Feature Identification Component */}
+      {selectedDatasetForFeatures && (
+        <FeatureIdentifier 
+          datasetId={selectedDatasetForFeatures} 
+          onFeatureIdentified={handleFeatureIdentified}
+        />
+      )}
     </div>
   );
 };
