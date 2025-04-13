@@ -52,96 +52,73 @@ const Dashboard = () => {
         setHasTeamData(false);
         setHasDriversData(false);
 
-        // Track if we've successfully fetched any real data
-        let hasRealData = false;
+        // Fetch all dashboard data in a single API call
+        const response = await api.get('/metrics/dashboard/summary', {
+          params: activeProject ? { project_id: activeProject.id } : {}
+        });
 
-        // Centralized async fetch function to reduce repetition
-        const fetchMetric = async (endpoint, setter, statusSetter) => {
-          try {
-            const response = await api.get(`/metrics/${endpoint}`);
-            // Check if data exists and is not empty (for arrays) or has keys (for objects)
-            if (response.data && (Array.isArray(response.data) ? response.data.length > 0 : Object.keys(response.data).length > 0)) {
-              setter(response.data);
-              statusSetter(true);
-              hasRealData = true;
-              return true;
-            }
-          } catch (error) {
-            console.log(`Could not fetch ${endpoint} data:`, error);
-            statusSetter(false); // Ensure status is false on error
-          }
-          return false;
-        };
-
-        // Fetch primary dashboard data
-        await Promise.all([
-          fetchMetric('performance', setPerformanceData, setHasPerformanceData),
-          fetchMetric('organization', setOrgData, setHasOrgData),
-          fetchMetric('teams', (data) => {
-            setTeamData(data);
-            // Also construct team composition data from team data
-            if (data && data.length > 0) {
-              const compositionData = data.map(team => ({
-                name: team.name,
-                value: team.size || 0 // Ensure value is a number
-              }));
-              setTeamComposition(compositionData);
-              setHasTeamData(true); // Set status only if data is valid
-            } else {
-               setHasTeamData(false); // Explicitly set false if no valid team data
-            }
-          }, setHasTeamData), // Pass status setter here
-          fetchMetric('drivers', setPerformanceDrivers, setHasDriversData)
-        ]);
-
-        // Fetch project-specific data if we have an active project
-        if (activeProject) {
-          try {
-            let projectDataFound = false;
-            const params = { project_id: activeProject.id };
-
-            const datasetsResponse = await api.get('/datasets', { params });
-            if (datasetsResponse.data && datasetsResponse.data.length > 0) {
-              setAvailableDatasets(datasetsResponse.data);
-              projectDataFound = true;
-              hasRealData = true; // Consider project data as real data
-            } else {
-              setAvailableDatasets([]);
-            }
-
-            const modelsResponse = await api.get('/models', { params });
-            if (modelsResponse.data && modelsResponse.data.length > 0) {
-              setRecentModels(modelsResponse.data.slice(0, 3)); // Get most recent 3
-              projectDataFound = true;
-              hasRealData = true; // Consider project data as real data
-            } else {
-              setRecentModels([]);
-            }
-
-            const simulationsResponse = await api.get('/simulations', { params });
-            if (simulationsResponse.data && simulationsResponse.data.length > 0) {
-              setRecentSimulations(simulationsResponse.data.slice(0, 3)); // Get most recent 3
-              projectDataFound = true;
-              hasRealData = true; // Consider project data as real data
-            } else {
-              setRecentSimulations([]);
-            }
-
-            setHasProjectData(projectDataFound);
-          } catch (error) {
-            console.log('Could not fetch project data:', error);
-            setHasProjectData(false);
-          }
-        } else {
-           // If no active project, clear project-specific data
-           setAvailableDatasets([]);
-           setRecentModels([]);
-           setRecentSimulations([]);
-           setHasProjectData(false);
+        const data = response.data;
+        
+        // Process performance data
+        if (data.performance && data.performance.length > 0) {
+          setPerformanceData(data.performance);
+          setHasPerformanceData(true);
         }
-
-        // Log real data status
-        if (hasRealData || hasProjectData) { // Check both general and project data
+        
+        // Process organization data
+        if (data.organization && Object.keys(data.organization).length > 0) {
+          setOrgData(data.organization);
+          setHasOrgData(true);
+        }
+        
+        // Process team data and composition
+        if (data.teams && data.teams.length > 0) {
+          setTeamData(data.teams);
+          
+          // Construct team composition data
+          const compositionData = data.teams.map(team => ({
+            name: team.name,
+            value: team.size || 0 // Ensure value is a number
+          }));
+          setTeamComposition(compositionData);
+          setHasTeamData(true);
+        }
+        
+        // Process performance drivers
+        if (data.drivers && data.drivers.length > 0) {
+          setPerformanceDrivers(data.drivers);
+          setHasDriversData(true);
+        }
+        
+        // Process project-specific data
+        let projectDataFound = false;
+        
+        if (data.datasets && data.datasets.length > 0) {
+          setAvailableDatasets(data.datasets);
+          projectDataFound = true;
+        } else {
+          setAvailableDatasets([]);
+        }
+        
+        if (data.models && data.models.length > 0) {
+          setRecentModels(data.models);
+          projectDataFound = true;
+        } else {
+          setRecentModels([]);
+        }
+        
+        if (data.simulations && data.simulations.length > 0) {
+          setRecentSimulations(data.simulations);
+          projectDataFound = true;
+        } else {
+          setRecentSimulations([]);
+        }
+        
+        setHasProjectData(projectDataFound);
+        
+        // Log data status
+        const hasRealData = hasPerformanceData || hasOrgData || hasTeamData || hasDriversData;
+        if (hasRealData || projectDataFound) {
           console.log('Successfully fetched dashboard data from API');
         } else {
           console.log('No real data found for dashboard');

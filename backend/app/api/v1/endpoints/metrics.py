@@ -14,6 +14,104 @@ from app.data.processor import OrganizationDataProcessor
 
 router = APIRouter() 
 
+@router.get("/dashboard/summary", response_model=dict) 
+async def get_dashboard_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """ 
+    Get all dashboard metrics in a single consolidated endpoint 
+    """
+    try:
+        # Get all metrics at once with real data only (no mock data)
+        performance_data = await get_performance_data(db, current_user)
+        org_metrics = await get_organization_metrics(db, current_user)
+        team_metrics = await get_team_metrics(db, current_user)
+        driver_metrics = await get_performance_drivers(db, current_user)
+        
+        # Get datasets for the user 
+        from app.models.user import UserProject 
+        accessible_projects = db.query(UserProject.project_id).filter_by(user_id=current_user.id).all() 
+        accessible_project_ids = [p.project_id for p in accessible_projects] 
+        
+        # Get available datasets
+        datasets = db.query(Dataset).filter(
+            Dataset.project_id.in_(accessible_project_ids) if accessible_project_ids else False
+        ).all()
+        
+        available_datasets = [
+            {
+                "id": ds.id,
+                "name": ds.name,
+                "description": ds.description,
+                "dataset_type": ds.dataset_type,
+                "record_count": ds.record_count,
+                "created_at": ds.created_at
+            } for ds in datasets
+        ]
+        
+        # Get recent models
+        models = db.query(Model).filter(
+            Model.project_id.in_(accessible_project_ids) if accessible_project_ids else False
+        ).order_by(Model.created_at.desc()).limit(3).all()
+        
+        recent_models = [
+            {
+                "id": model.id,
+                "name": model.name,
+                "description": model.description,
+                "model_type": model.model_type,
+                "r2_score": model.r2_score,
+                "target_column": None,  # Target column not stored in the model table
+                "created_at": model.created_at
+            } for model in models
+        ]
+        
+        # Get recent simulations
+        simulations = db.query(Simulation).filter(
+            Simulation.project_id.in_(accessible_project_ids) if accessible_project_ids else False
+        ).order_by(Simulation.created_at.desc()).limit(3).all()
+        
+        recent_simulations = [
+            {
+                "id": sim.id,
+                "name": sim.name,
+                "description": sim.description,
+                "steps": sim.steps,  # Renamed to months in frontend
+                "created_at": sim.created_at,
+                "avg_performance": None  # Would need to parse results
+            } for sim in simulations
+        ]
+        
+        # Try to extract avg_performance from simulation results if available
+        for i, sim in enumerate(simulations):
+            if sim.results:
+                try:
+                    results = json.loads(sim.results)
+                    if results and isinstance(results, list):
+                        performance_values = [r.get('performance', 0) for r in results if 'performance' in r]
+                        if performance_values:
+                            recent_simulations[i]['avg_performance'] = round(sum(performance_values) / len(performance_values), 1)
+                except (json.JSONDecodeError, TypeError, ZeroDivisionError):
+                    pass
+        
+        # Combine all metrics
+        return {
+            "performance": performance_data,
+            "organization": org_metrics,
+            "teams": team_metrics,
+            "drivers": driver_metrics,
+            "datasets": available_datasets,
+            "models": recent_models,
+            "simulations": recent_simulations
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching dashboard summary: {str(e)}"
+        )
+
 @router.get("/performance", response_model=list) 
 async def get_performance_data(
     db: Session = Depends(get_db),
@@ -61,16 +159,9 @@ async def get_performance_data(
                     # Fallback to default data 
                     pass 
 
-        # If we don't have simulation data, generate realistic mock data 
-        if not performance_data: 
-            performance_data = [
-                {"month": "Jan", "performance": 70, "innovation": 58, "target": 75},
-                {"month": "Feb", "performance": 72, "innovation": 60, "target": 75},
-                {"month": "Mar", "performance": 75, "innovation": 65, "target": 75},
-                {"month": "Apr", "performance": 74, "innovation": 68, "target": 75},
-                {"month": "May", "performance": 78, "innovation": 72, "target": 75},
-                {"month": "Jun", "performance": 76, "innovation": 75, "target": 75}
-            ]
+        # Return empty array if no performance data is available
+        if not performance_data:
+            performance_data = []
 
         return performance_data
 
@@ -151,15 +242,15 @@ async def get_organization_metrics(
             except Exception as e: 
                 print(f"Error reading dataset file: {e}") 
 
-        # If we couldn't get real data, provide realistic mock data 
-        if org_data["employees"] == 0: 
+        # Keep the actual data values, don't provide mock data
+        if org_data["employees"] == 0:
             org_data.update({
-                "name": "Sample Organization",
-                "employees": 248,
-                "teams": 28,
-                "departments": 5,
-                "avgPerformance": 76,
-                "trendingUp": True
+                "name": "Organization", 
+                "employees": 0,
+                "teams": 0,
+                "departments": 0,
+                "avgPerformance": 0,
+                "trendingUp": False
             })
 
         return org_data
@@ -246,15 +337,9 @@ async def get_team_metrics(
             except Exception as e: 
                 print(f"Error reading dataset file: {e}") 
 
-        # If we couldn't get real data, provide realistic mock data 
-        if not team_data: 
-            team_data = [
-                {"name": "Engineering", "performance": 82, "size": 45, "communication": "High", "innovation": 78},
-                {"name": "Marketing", "performance": 75, "size": 32, "communication": "Medium", "innovation": 76},
-                {"name": "Sales", "performance": 80, "size": 38, "communication": "High", "innovation": 65},
-                {"name": "Product", "performance": 79, "size": 28, "communication": "Medium", "innovation": 80},
-                {"name": "Support", "performance": 72, "size": 35, "communication": "Medium", "innovation": 60}
-            ]
+        # Return empty array if no team data is available
+        if not team_data:
+            team_data = []
 
         return team_data
 
@@ -305,15 +390,9 @@ async def get_performance_drivers(
                 except json.JSONDecodeError: 
                     pass 
 
-        # If we couldn't get real data, provide realistic mock data 
-        if not performance_drivers: 
-            performance_drivers = [
-                {"name": "Team Cohesion", "value": 85},
-                {"name": "Skill Level", "value": 78},
-                {"name": "Communication", "value": 72},
-                {"name": "Leadership", "value": 68},
-                {"name": "Process Efficiency", "value": 65}
-            ]
+        # Return empty array if no performance driver data is available
+        if not performance_drivers:
+            performance_drivers = []
 
         return performance_drivers
 
