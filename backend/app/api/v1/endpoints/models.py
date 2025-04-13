@@ -7,6 +7,7 @@ import pickle
 import glob
 from datetime import datetime
 from typing import Dict, Any
+import uuid  # Add import for generating unique IDs
 
 from app.config.database import get_db
 from app.config.auth import get_current_active_user
@@ -17,10 +18,9 @@ from app.ml.predictor import OrganizationalPerformancePredictor
 
 router = APIRouter()
 
-@router.get("/training-progress/{dataset_id}", response_model=Dict[str, Any])
+@router.get("/training-progress/{job_id}", response_model=Dict[str, Any])
 def get_training_progress(
-    dataset_id: int,
-    model_type: str = None,
+    job_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -28,46 +28,46 @@ def get_training_progress(
     Get the progress of a model training job
     """
     try:
-        # Construct the pattern to search for
-        pattern = f"training_progress_{dataset_id}_{model_type if model_type else '*'}.json"
+        # Look for the specific progress file with this job_id
         model_storage_path = os.path.join(settings.MODEL_STORAGE_PATH, "models")
-        progress_files = glob.glob(os.path.join(model_storage_path, pattern))
-
-        if not progress_files:
+        progress_file = os.path.join(model_storage_path, f"training_progress_{job_id}.json")
+        
+        if not os.path.exists(progress_file):
             return {
                 "status": "not_found",
                 "progress": 0,
-                "message": "No training job found for the specified dataset"
+                "message": f"No training job found with ID: {job_id}"
             }
-
-        # Get the most recent progress file
-        latest_file = max(progress_files, key=os.path.getmtime)
-
+            
         # Read the progress file
-        with open(latest_file, 'r') as f:
+        with open(progress_file, 'r') as f:
             progress_data = json.load(f)
-
-        # Check if the user has access to this dataset
-        dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
-        if not dataset:
-            return {
-                "status": "not_found",
-                "progress": 0,
-                "message": "Dataset not found"
-            }
-
-        if dataset.project_id:
-            # from app.models.user import UserProject # Already imported at top
-            user_project = db.query(UserProject).filter_by(
-                user_id=current_user.id,
-                project_id=dataset.project_id
-            ).first()
-            if not user_project:
+            
+        # Check if the user has access to the dataset in this job
+        if 'dataset_id' in progress_data:
+            dataset_id = progress_data['dataset_id']
+            dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+            
+            if not dataset:
                 return {
-                    "status": "forbidden",
+                    "status": "not_found",
                     "progress": 0,
-                    "message": "User does not have access to this dataset"
+                    "message": "Dataset not found"
                 }
+                
+            if dataset.project_id:
+                # Check project access
+                user_project = db.query(UserProject).filter_by(
+                    user_id=current_user.id,
+                    project_id=dataset.project_id
+                ).first()
+                
+                if not user_project:
+                    return {
+                        "status": "forbidden",
+                        "progress": 0,
+                        "message": "User does not have access to this dataset"
+                    }
 
         return progress_data
     except Exception as e:
@@ -246,17 +246,21 @@ async def train_model(
         # Initialize predictor with specified model type
         predictor = OrganizationalPerformancePredictor(model_type=model_type)
 
+        # Generate a unique job_id for this training run
+        job_id = str(uuid.uuid4())
+        
         # Save training progress state to allow resuming if interrupted
-        progress_path = os.path.join(model_storage_path, f"training_progress_{dataset_id}_{model_type}.json")
+        progress_path = os.path.join(model_storage_path, f"training_progress_{job_id}.json")
 
         # Create progress data structure
         progress_data = {
+            "job_id": job_id,  # Store the job_id in the progress data
             "status": "started",
             "dataset_id": dataset_id,
             "model_type": model_type,
             "target_column": target_column,
             "features": features,
-            "validation_strategy": validation_strategy, # Added validation strategy
+            "validation_strategy": validation_strategy,
             "started_at": str(datetime.now()),
             "user_id": current_user.id,
             "progress": 0
@@ -323,12 +327,13 @@ async def train_model(
         db.commit()
         db.refresh(model_record)
 
-        # Return results including validation strategy
+        # Return results including validation strategy and job_id
         return {
             "id": model_record.id,
             "name": model_record.name,
             "description": model_record.description,
             "model_type": model_type,
+            "job_id": job_id,  # Include the job_id in the response
             "metrics": {
                 "r2": results["r2"],
                 "rmse": results["rmse"],
@@ -337,7 +342,7 @@ async def train_model(
             "feature_importances": predictor.feature_importances,
             "parameters": predictor.training_history.get("parameters", {}),
             "features": features,
-            "validation_strategy": validation_strategy # Return validation strategy
+            "validation_strategy": validation_strategy
         }
 
     except Exception as e:
@@ -350,6 +355,12 @@ async def train_model(
                 json.dump(progress_data, f)
         except Exception as write_error:
             print(f"Error writing progress file on training failure: {write_error}")
+            
+        # Return job_id even on error so frontend can still track progress
+        return {
+            "error": str(e),
+            "job_id": job_id
+        }
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -62,28 +62,21 @@ const NetworkAnalysis = () => {
     try {
       setLoading(true);
 
-      // Get datasets with network data
-      const response = await api.get('/datasets');
-
-      // Filter for processed datasets - prioritize them by 'processed' dataset_type
-      const networkDatasets = response.data.filter(dataset =>
-        dataset.dataset_type === 'processed' ||
-        dataset.name.toLowerCase().includes('processed') ||
-        dataset.name.toLowerCase().includes('communication') ||
-        dataset.description.toLowerCase().includes('network')
-      );
+      // Get datasets with network data using backend filtering
+      // Use the dataset_type query parameter to only fetch processed or communication datasets
+      const response = await api.get('/datasets', {
+        params: { dataset_type: 'processed' }
+      });
+      
+      // These should already be processed datasets due to the backend filter
+      const networkDatasets = response.data;
 
       setDatasets(networkDatasets);
 
-      // Auto-select the most recent processed dataset if available
+      // Auto-select the most recent dataset if available
       if (networkDatasets.length > 0) {
-        // Prioritize processed datasets
-        const processedDatasets = networkDatasets.filter(ds =>
-          ds.dataset_type === 'processed' || ds.name.toLowerCase().includes('processed')
-        );
-
         // Sort by date (newest first) and take the first one
-        const datasetToUse = (processedDatasets.length > 0 ? processedDatasets : networkDatasets)
+        const datasetToUse = networkDatasets
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
 
         setSelectedDataset(datasetToUse.id);

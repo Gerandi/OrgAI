@@ -76,10 +76,9 @@ const ModelBuilder = () => {
   const [modelDescription, setModelDescription] = useState('');
   const [validationStrategy, setValidationStrategy] = useState('cross_validation');
   const [targetColumns, setTargetColumns] = useState([]);
-  const [trainingProgress, setTrainingProgress] = useState(0); // Added state
-  const [trainingStatus, setTrainingStatus] = useState(null); // Added state: 'started', 'processing', 'completed', 'error'
-  const [trainingDatasetId, setTrainingDatasetId] = useState(null); // Added state
-  const [trainingModelType, setTrainingModelType] = useState(null); // Added state
+  const [trainingProgress, setTrainingProgress] = useState(0); // Progress percentage
+  const [trainingStatus, setTrainingStatus] = useState(null); // 'started', 'processing', 'completed', 'error'
+  const [trainingJobId, setTrainingJobId] = useState(null); // Job ID for tracking progress
 
   // Use this in useEffect to handle navigation with state from NetworkAnalysis
   useEffect(() => {
@@ -309,8 +308,7 @@ const ModelBuilder = () => {
     setSuccess(null);
     setTrainingProgress(0); // Reset progress
     setTrainingStatus('started'); // Set status
-    setTrainingDatasetId(selectedDataset); // Set training ID
-    setTrainingModelType(modelType); // Set model type for progress tracking
+    setTrainingJobId(null); // Reset job ID until we get one from the API
 
     let useMockDataFallback = false; // Flag to track if mock data path is taken
     try {
@@ -358,6 +356,21 @@ const ModelBuilder = () => {
         setTrainingProgress(100);
         setTrainingStatus('completed');
 
+        // Ensure we have a valid model ID from the response
+        if (!response.data || !response.data.id) {
+          throw new Error('No model ID returned from training endpoint');
+        }
+
+        // Store the full response as savedModel for future updates
+        setSavedModel(response.data);
+        console.log('Successfully stored model ID:', response.data.id);
+        
+        // Save job_id for progress tracking
+        if (response.data.job_id) {
+          setTrainingJobId(response.data.job_id);
+          console.log('Training job ID:', response.data.job_id);
+        }
+
         // Set results from the API response
         const modelData = {
           id: response.data.id,
@@ -374,7 +387,6 @@ const ModelBuilder = () => {
         };
 
         setModelResults(modelData);
-        setSavedModel(response.data); // Store the full response as savedModel
 
         // Refresh the models list
         setModelsRefreshTrigger(prev => prev + 1);
@@ -386,6 +398,12 @@ const ModelBuilder = () => {
         // Clear the progress interval
         clearInterval(progressInterval);
         setTrainingStatus('error');
+        
+        // Check if we received a job_id even though there was an error
+        if (apiError.response?.data?.job_id) {
+          setTrainingJobId(apiError.response.data.job_id);
+          console.log('Received job ID despite error:', apiError.response.data.job_id);
+        }
 
         console.error('API error, using mock training results:', apiError);
         useMockDataFallback = true; // Set flag for mock data path
@@ -470,11 +488,12 @@ const ModelBuilder = () => {
     setSuccess(null);
 
     try {
-      if (!modelResults) {
-        throw new Error('No model to save');
+      if (!savedModel || !savedModel.id) {
+        // We should always have a savedModel from the training step
+        throw new Error('No trained model available to save/update');
       }
 
-      console.log('Saving model with data:', {
+      console.log('Updating model with data:', {
         name: modelName,
         description: modelDescription,
         project_id: activeProject?.id
@@ -489,36 +508,12 @@ const ModelBuilder = () => {
         project_id: activeProject?.id // Make sure it's connected to the project
       };
 
-      // Call the API to save/update the model
-      let response;
-
-      // Use the ID from the training response (savedModel) if available
-      const modelIdToUpdate = savedModel?.id || modelResults?.id;
-
-      if (modelIdToUpdate) {
-        // Update existing model (using PUT on the model ID)
-        console.log(`Updating existing model ${modelIdToUpdate}`);
-        response = await api.put(`/models/${modelIdToUpdate}`, saveRequest);
-        setSavedModel(response.data); // Update savedModel state with the response
-        setSuccess('Model updated successfully!');
-      } else {
-         // This case should ideally not happen if training was successful
-         // but handle it just in case by creating a new model record
-        console.log('Creating new model entry (fallback)');
-        response = await api.post('/models', { // Use POST to create
-          ...saveRequest,
-          model_type: modelType,
-          features: selectedFeatures,
-          target_column: targetVariable,
-          validation_strategy: validationStrategy,
-          // Include metrics from results
-          r2_score: modelResults.r2_score,
-          rmse: modelResults.rmse,
-          dataset_id: selectedDataset
-        });
-        setSavedModel(response.data); // Update savedModel state
-        setSuccess('Model saved successfully!');
-      }
+      // Always update the existing model created during training
+      const modelIdToUpdate = savedModel.id;
+      console.log(`Updating existing model ${modelIdToUpdate}`);
+      const response = await api.put(`/models/${modelIdToUpdate}`, saveRequest);
+      setSavedModel(response.data); // Update savedModel state with the response
+      setSuccess('Model updated successfully!');
 
       // Refresh the models list
       setModelsRefreshTrigger(prev => prev + 1);
@@ -898,8 +893,7 @@ const ModelBuilder = () => {
                 {(trainingStatus === 'processing' || trainingStatus === 'started') && (
                   <div className="my-4">
                     <TrainingProgress
-                      trainingId={trainingDatasetId} // Pass dataset ID as training ID
-                      modelType={trainingModelType} // Pass model type
+                      jobId={trainingJobId} // Pass the job ID for progress tracking
                       progress={trainingProgress}
                       status={trainingStatus}
                       onComplete={(data) => { // Handle completion callback
@@ -923,6 +917,10 @@ const ModelBuilder = () => {
                           setModelResults(modelData);
                           setActiveStep('results');
                           setSuccess('Model trained successfully!');
+                        }
+                        else if (data.status === 'error') {
+                          setTrainingStatus('error');
+                          setError('Error during model training: ' + (data.message || 'Unknown error'));
                         }
                       }}
                     />

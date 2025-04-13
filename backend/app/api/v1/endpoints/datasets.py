@@ -228,6 +228,7 @@ async def upload_dataset(
 @router.get("/", response_model=List[dict])
 def list_datasets(
     project_id: int = None,
+    dataset_type: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -286,10 +287,14 @@ def list_datasets(
             # If there's an error, don't apply project filtering - show all datasets
             pass
 
+    # Filter by dataset_type if provided
+    if dataset_type:
+        query = query.filter(Dataset.dataset_type == dataset_type)
+        
     # Get datasets
     print(f"Fetching datasets for user: {current_user.username}")
     datasets = query.offset(skip).limit(limit).all()
-    print(f"Found {len(datasets)} datasets")
+    print(f"Found {len(datasets)} datasets, filtered by type: {dataset_type if dataset_type else 'None'}")
 
     return [
         {

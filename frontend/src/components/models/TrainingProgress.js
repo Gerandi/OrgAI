@@ -3,11 +3,10 @@ import { CheckCircle, XCircle, Loader } from 'lucide-react';
 import api from '../../services/api';
 
 const TrainingProgress = ({
-  trainingId, // Use dataset ID as training ID for now
+  jobId, // Unique job ID for the training run
   progress,
   onComplete,
   status, // 'started', 'processing', 'completed', 'error'
-  modelType, // Added modelType
   autoRefresh = true
 }) => {
   const [refreshInterval, setRefreshInterval] = useState(null);
@@ -25,8 +24,8 @@ const TrainingProgress = ({
   }, [progress, status]);
 
   useEffect(() => {
-    // If we have a training ID and auto-refresh is enabled, periodically check status
-    if (trainingId && autoRefresh && lastStatus !== 'completed' && lastStatus !== 'error') {
+    // If we have a job ID and auto-refresh is enabled, periodically check status
+    if (jobId && autoRefresh && lastStatus !== 'completed' && lastStatus !== 'error') {
       const interval = setInterval(() => {
         checkProgress();
       }, 3000); // Check every 3 seconds
@@ -41,18 +40,14 @@ const TrainingProgress = ({
         clearInterval(refreshInterval);
         setRefreshInterval(null);
     }
-  }, [trainingId, autoRefresh, lastStatus]); // Rerun effect if these change
+  }, [jobId, autoRefresh, lastStatus]); // Rerun effect if these change
 
   const checkProgress = async () => {
-    if (!trainingId) return;
+    if (!jobId) return;
 
     try {
-      // Pass modelType as query parameter
-      const params = {};
-      if (modelType) {
-        params.model_type = modelType;
-      }
-      const response = await api.get(`/models/training-progress/${trainingId}`, { params });
+      // Use the job_id in the API call
+      const response = await api.get(`/models/training-progress/${jobId}`);
 
       if (response.data) {
         setLastProgress(response.data.progress || 0);
@@ -61,10 +56,10 @@ const TrainingProgress = ({
         if (response.data.status === 'completed' && onComplete) {
           onComplete(response.data); // Pass full progress data on completion
         }
-         if (response.data.status === 'error' && onComplete) {
-           // Optionally handle error completion if needed
-           // onComplete(response.data);
-         }
+        if (response.data.status === 'error' && onComplete) {
+          // Also notify on error completion
+          onComplete(response.data);
+        }
       }
     } catch (error) {
       console.error('Error checking training progress:', error);

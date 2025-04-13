@@ -60,7 +60,7 @@ yarn-error.log*
 *.sqlite3
 
 # Model storage
-/model_storage/
+backend/model_storage/
 /simulations/
 /models/
 *.model
