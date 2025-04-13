@@ -327,41 +327,42 @@ class OrganizationalPerformancePredictor:
         return results
 
 
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def predict(self, X_unscaled: np.ndarray) -> np.ndarray:
         """
-        Make predictions with the trained model. Handles scaling.
+        Make predictions with the trained model.
+        Expected input is unscaled data, same as what was provided during training.
+        
+        Args:
+            X_unscaled: Raw, unscaled feature matrix
+            
+        Returns:
+            Predicted values
         """
         if self.model is None:
             raise ValueError("Model has not been trained yet")
 
-        # Check if input X needs scaling
-        # Simple check: if means/stds are very different from scaler's, assume not scaled
-        needs_scaling = True
-        if X.shape[1] == len(self.scaler.mean_):
-             # Check if data might already be scaled (mean close to 0, std close to 1)
-             # This is heuristic and might not always be correct
-             if np.allclose(X.mean(axis=0), 0, atol=0.1) and np.allclose(X.std(axis=0), 1, atol=0.1):
-                 needs_scaling = False
-             # More robust: check against scaler's learned parameters
-             elif np.allclose(X.mean(axis=0), self.scaler.mean_, atol=0.1) and \
-                  np.allclose(X.std(axis=0), np.sqrt(self.scaler.var_), atol=0.1):
-                  # This case is unlikely unless passing the exact training data back
-                  needs_scaling = False # Assume it was scaled with this scaler
-
-        X_to_predict = self.scaler.transform(X) if needs_scaling else X
-
+        # Always scale the input data using the stored scaler
+        X_scaled = self.scaler.transform(X_unscaled)
+        
         # Make predictions
-        return self.model.predict(X_to_predict)
+        return self.model.predict(X_scaled)
 
-    def predict_with_explanations(self, X: np.ndarray) -> Tuple[np.ndarray, Optional[Dict]]:
+    def predict_with_explanations(self, X_unscaled: np.ndarray) -> Tuple[np.ndarray, Optional[Dict]]:
         """
         Make predictions and provide feature contribution explanations.
+        Expected input is unscaled data, same as what was provided during training.
+        
+        Args:
+            X_unscaled: Raw, unscaled feature matrix
+            
+        Returns:
+            Tuple of (predictions, feature_contributions)
         """
         if self.model is None:
             raise ValueError("Model has not been trained yet")
 
-        # Get predictions (handles scaling)
-        predictions = self.predict(X)
+        # Get predictions
+        predictions = self.predict(X_unscaled)
 
         # Provide feature contributions if available
         feature_contributions = None
@@ -484,59 +485,16 @@ class OrganizationalPerformancePredictor:
     def evaluate_team_structure(self, team_data: pd.DataFrame) -> Dict:
         """
         Evaluate a team structure and provide insights on performance drivers.
+        Expected input is unscaled data, same as what was provided during training.
+        
+        Args:
+            team_data: DataFrame with raw, unscaled feature values
+            
+        Returns:
+            Dictionary with predictions and insights
         """
-        if self.model is None:
-            raise ValueError("Model has not been trained yet")
-
-        # Ensure all required features are present, fill missing with mean/median or 0
-        if self.feature_names:
-            X_eval = pd.DataFrame(columns=self.feature_names) # Create df with correct columns
-            for col in self.feature_names:
-                 if col in team_data.columns:
-                     X_eval[col] = team_data[col]
-                 else:
-                     # Fill missing features - using 0 might be okay, or use scaler's mean
-                     X_eval[col] = self.scaler.mean_[self.feature_names.index(col)] if hasattr(self.scaler, 'mean_') else 0
-            X = X_eval.values
-        else:
-             # Cannot proceed reliably without knowing expected features
-             raise ValueError("Cannot evaluate without knowing the model's feature names")
-
-
-        # Make predictions (handles scaling)
-        predictions = self.predict(X)
-
-        # Get feature insights
-        insights = {}
-        if self.feature_importances:
-            sorted_features = sorted(self.feature_importances.items(), key=lambda x: x[1], reverse=True)
-            insights['top_drivers'] = [{"feature": k, "importance": v} for k, v in sorted_features[:5]]
-
-            # Basic comparison to average values (if scaler has means)
-            if hasattr(self.scaler, 'mean_') and self.feature_names:
-                 avg_values = dict(zip(self.feature_names, self.scaler.mean_))
-                 unusual_values = {}
-                 for feature in self.feature_names:
-                     if feature in team_data.columns and feature in avg_values:
-                         team_avg = team_data[feature].mean()
-                         global_avg = avg_values[feature]
-                         # Check if feature is important and value deviates significantly
-                         # (Using std dev might be better than fixed threshold)
-                         if self.feature_importances.get(feature, 0) > 0.02 and abs(team_avg - global_avg) > 0.5 * abs(global_avg): # Avoid division by zero
-                             direction = "higher" if team_avg > global_avg else "lower"
-                             unusual_values[feature] = {
-                                 "team_value": float(team_avg),
-                                 "global_avg": float(global_avg),
-                                 "direction": direction,
-                                 "impact": float(self.feature_importances.get(feature, 0))
-                             }
-                 insights['unusual_values'] = unusual_values
-
-        return {
-            'predictions': predictions.tolist(),
-            'average_performance': float(np.mean(predictions)),
-            'insights': insights
-        }
+        from app.ml.team_evaluator import TeamStructureEvaluator
+        return TeamStructureEvaluator.evaluate_team(self, team_data)
 
     def get_training_history(self) -> Dict:
         """

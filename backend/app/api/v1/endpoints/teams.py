@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.config.auth import get_current_active_user
 from app.models.user import User, UserOrganization
-from app.models.organization import Organization, Team, Employee
+from app.models.organization import Organization, Team, Employee, Department
+from app.schemas.organization import TeamCreate, TeamUpdate, TeamResponse
 
 router = APIRouter()
 
@@ -291,7 +292,7 @@ def get_team(
 
 @router.post("/", response_model=dict)
 def create_team(
-    team_data: dict = Body(...),
+    team_data: TeamCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -299,12 +300,7 @@ def create_team(
     Create a new team
     """
     # Check if organization exists and user has admin rights
-    org_id = team_data.get("organization_id")
-    if not org_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Organization ID is required"
-        )
+    org_id = team_data.organization_id
 
     user_org = db.query(UserOrganization)\
         .filter(UserOrganization.user_id == current_user.id, UserOrganization.organization_id == org_id)\
@@ -324,7 +320,7 @@ def create_team(
         )
 
     # Check if department exists within the organization
-    dept_id = team_data.get("department_id")
+    dept_id = team_data.department_id
     if dept_id:
         dept = db.query(Department)\
             .filter(Department.id == dept_id, Department.organization_id == org_id)\
@@ -337,11 +333,14 @@ def create_team(
 
     # Create team
     team = Team(
-        name=team_data["name"],
-        description=team_data.get("description"),
+        name=team_data.name,
+        description=team_data.description,
         organization_id=org_id,
-        department_id=dept_id
-        # Team lead is not set at creation, maybe update later
+        department_id=dept_id,
+        team_lead_id=team_data.team_lead_id,
+        performance_score=team_data.performance_score,
+        innovation_score=team_data.innovation_score,
+        communication_score=team_data.communication_score
     )
 
     db.add(team)
@@ -358,6 +357,10 @@ def create_team(
         "organization_id": team.organization_id,
         "department_id": team.department_id,
         "team_size": employee_count, # Dynamically calculated
+        "team_lead_id": team.team_lead_id,
+        "performance_score": team.performance_score,
+        "innovation_score": team.innovation_score,
+        "communication_score": team.communication_score,
         "created_at": team.created_at,
         "updated_at": team.updated_at
     }
@@ -365,7 +368,7 @@ def create_team(
 @router.put("/{team_id}", response_model=dict)
 def update_team(
     team_id: int,
-    team_data: dict = Body(...),
+    team_data: TeamUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -391,25 +394,23 @@ def update_team(
         )
 
     # Check if department exists within the organization if changed
-    dept_id = team_data.get("department_id")
-    if dept_id is not None and dept_id != team.department_id:
+    if team_data.department_id is not None and team_data.department_id != team.department_id:
         dept = db.query(Department)\
-            .filter(Department.id == dept_id, Department.organization_id == team.organization_id)\
+            .filter(Department.id == team_data.department_id, Department.organization_id == team.organization_id)\
             .first()
-        if not dept and dept_id is not None: # Check if not None again, as it could be set to null
+        if not dept and team_data.department_id is not None: # Check if not None again, as it could be set to null
              raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Department not found in this organization"
             )
-        team.department_id = dept_id
+        team.department_id = team_data.department_id
 
     # Check if team lead exists within the organization if changed
-    team_lead_id = team_data.get("team_lead_id")
-    if team_lead_id is not None and team_lead_id != team.team_lead_id:
+    if team_data.team_lead_id is not None and team_data.team_lead_id != team.team_lead_id:
         lead = db.query(Employee)\
-            .filter(Employee.id == team_lead_id, Employee.organization_id == team.organization_id)\
+            .filter(Employee.id == team_data.team_lead_id, Employee.organization_id == team.organization_id)\
             .first()
-        if not lead and team_lead_id is not None:
+        if not lead and team_data.team_lead_id is not None:
              raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Team lead employee not found in this organization"
@@ -420,22 +421,23 @@ def update_team(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Chosen team lead is not a member of this team"
             )
-        team.team_lead_id = team_lead_id
+        team.team_lead_id = team_data.team_lead_id
 
-
-    # Update fields
-    if "name" in team_data:
-        team.name = team_data["name"]
-    if "description" in team_data:
-        team.description = team_data["description"]
-    # Performance scores are likely calculated elsewhere, but allow manual override if needed
-    if "performance_score" in team_data:
-        team.performance_score = team_data["performance_score"]
-    if "innovation_score" in team_data:
-        team.innovation_score = team_data["innovation_score"]
-    if "communication_score" in team_data:
-        team.communication_score = team_data["communication_score"]
-
+    # Update fields using Pydantic model exclude_unset=True to only include provided fields
+    update_data = team_data.model_dump(exclude_unset=True)
+    
+    # Update all non-None fields from the update data
+    if "name" in update_data:
+        team.name = update_data["name"]
+    if "description" in update_data:
+        team.description = update_data["description"]
+    # Performance scores
+    if "performance_score" in update_data:
+        team.performance_score = update_data["performance_score"]
+    if "innovation_score" in update_data:
+        team.innovation_score = update_data["innovation_score"]
+    if "communication_score" in update_data:
+        team.communication_score = update_data["communication_score"]
 
     db.add(team)
     db.commit()
@@ -450,7 +452,6 @@ def update_team(
         lead = db.query(Employee).filter(Employee.id == team.team_lead_id).first()
         if lead:
             team_lead_name = lead.name
-
 
     return {
         "id": team.id,

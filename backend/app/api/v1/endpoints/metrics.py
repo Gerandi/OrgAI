@@ -8,7 +8,8 @@ import datetime
 
 from app.config.database import get_db 
 from app.config.auth import get_current_active_user 
-from app.models.user import User 
+from app.models.user import User, UserOrganization
+from app.models.organization import Organization, Department, Team, Employee
 from app.models.research import Dataset, Model, Simulation 
 from app.data.processor import OrganizationDataProcessor 
 
@@ -129,12 +130,7 @@ async def get_performance_data(
         # Get performance data from simulations 
         simulations = db.query(Simulation).filter(Simulation.project_id.in_(accessible_project_ids)).all() 
 
-        # Generate the last 6 months performance data 
-        current_month = datetime.datetime.now().month 
-        current_year = datetime.datetime.now().year 
-
         # Default data if no simulations exist 
-        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'] 
         performance_data = [] 
 
         # If we have simulations, use their data 
@@ -149,19 +145,15 @@ async def get_performance_data(
                     performance_data = [
                         {
                             "month": r.get("month_label", f"Month {r.get('month', i+1)}"),
-                            "performance": r.get("performance", 70 + (i*2) % 10),
-                            "innovation": r.get("innovation", 60 + (i*3) % 15),
+                            "performance": r.get("performance", 0),
+                            "innovation": r.get("innovation", 0),
                             "target": 75  # Target line 
                         }
                         for i, r in enumerate(results)
                     ]
                 except (json.JSONDecodeError, TypeError): 
-                    # Fallback to default data 
+                    # Fallback to empty array
                     pass 
-
-        # Return empty array if no performance data is available
-        if not performance_data:
-            performance_data = []
 
         return performance_data
 
@@ -180,79 +172,57 @@ async def get_organization_metrics(
     Get organization overview metrics for dashboard 
     """
     try:
-        # Get datasets for the user 
-        from app.models.user import UserProject 
-        accessible_projects = db.query(UserProject.project_id).filter_by(user_id=current_user.id).all() 
-        accessible_project_ids = [p.project_id for p in accessible_projects] 
-
-        # Default organization data 
+        # Get organization data directly from database instead of datasets
         org_data = {
-            "name": "Sample Organization",
+            "name": "Organization", 
             "employees": 0,
             "teams": 0,
             "departments": 0,
             "avgPerformance": 0,
-            "trendingUp": True
+            "trendingUp": False
         }
-
-        # Try to get organization structure data 
-        org_datasets = db.query(Dataset).filter(
-            Dataset.dataset_type.in_(['organization', 'processed']),
-            Dataset.project_id.in_(accessible_project_ids)
-        ).all() 
-
-        if org_datasets: 
-            # Use the most recent dataset 
-            dataset = sorted(org_datasets, key=lambda x: x.created_at, reverse=True)[0] 
-
-            try: 
-                # Read the dataset 
-                df = pd.read_csv(dataset.file_path) 
-
-                # Extract organization metrics 
-                employees_count = len(df) 
-
-                # Get teams count if available 
-                teams_count = 0 
-                if 'team' in df.columns: 
-                    teams_count = df['team'].nunique() 
-                elif 'team_id' in df.columns: 
-                    teams_count = df['team_id'].nunique() 
-
-                # Get departments count if available 
-                departments_count = 0 
-                if 'department' in df.columns: 
-                    departments_count = df['department'].nunique() 
-
-                # Get average performance if available 
-                avg_performance = 0 
-                perf_trending_up = True 
-                if 'performance' in df.columns: 
-                    avg_performance = float(df['performance'].mean()) 
-
-                # Update org data 
-                org_data.update({
-                    "name": dataset.name.split(" ")[0] if " " in dataset.name else "Organization",
-                    "employees": employees_count,
-                    "teams": teams_count,
-                    "departments": departments_count,
-                    "avgPerformance": round(avg_performance, 1) if avg_performance else 76,
-                    "trendingUp": perf_trending_up
-                })
-            except Exception as e: 
-                print(f"Error reading dataset file: {e}") 
-
-        # Keep the actual data values, don't provide mock data
-        if org_data["employees"] == 0:
+        
+        # Get user's accessible organizations
+        accessible_orgs = db.query(UserOrganization.organization_id).filter_by(user_id=current_user.id).all()
+        accessible_org_ids = [o.organization_id for o in accessible_orgs]
+        
+        if accessible_org_ids:
+            # Count entities directly from database
+            employee_count = db.query(Employee).filter(Employee.organization_id.in_(accessible_org_ids)).count()
+            team_count = db.query(Team).filter(Team.organization_id.in_(accessible_org_ids)).count()
+            department_count = db.query(Department).filter(Department.organization_id.in_(accessible_org_ids)).count()
+            
+            # Get average performance score (if available)
+            avg_performance = 0
+            perf_records = db.query(Employee.performance_score).filter(
+                Employee.organization_id.in_(accessible_org_ids), 
+                Employee.performance_score != None
+            ).all()
+            if perf_records:
+                perf_scores = [r[0] for r in perf_records]
+                avg_performance = sum(perf_scores) / len(perf_scores)
+            
+            # Check if performance is trending up (basic heuristic)
+            # Would ideally use historical snapshots here
+            perf_trending_up = True  # Default or could be calculated from snapshots
+            
+            # Get org name (use first org for now)
+            org_name = "Organization"
+            if accessible_org_ids:
+                org = db.query(Organization).filter(Organization.id == accessible_org_ids[0]).first()
+                if org:
+                    org_name = org.name
+            
+            # Update org data
             org_data.update({
-                "name": "Organization", 
-                "employees": 0,
-                "teams": 0,
-                "departments": 0,
-                "avgPerformance": 0,
-                "trendingUp": False
+                "name": org_name,
+                "employees": employee_count,
+                "teams": team_count,
+                "departments": department_count,
+                "avgPerformance": round(avg_performance, 1) if avg_performance else 0,
+                "trendingUp": perf_trending_up
             })
-
+        
         return org_data
 
     except Exception as e:
@@ -270,77 +240,44 @@ async def get_team_metrics(
     Get team performance metrics for dashboard 
     """
     try:
-        # Get datasets for the user 
-        from app.models.user import UserProject 
-        accessible_projects = db.query(UserProject.project_id).filter_by(user_id=current_user.id).all() 
-        accessible_project_ids = [p.project_id for p in accessible_projects] 
-
-        # Try to get team data from datasets 
-        org_datasets = db.query(Dataset).filter(
-            Dataset.dataset_type.in_(['organization', 'processed']),
-            Dataset.project_id.in_(accessible_project_ids)
-        ).all() 
-
-        team_data = [] 
-
-        if org_datasets: 
-            # Use the most recent dataset 
-            dataset = sorted(org_datasets, key=lambda x: x.created_at, reverse=True)[0] 
-
-            try: 
-                # Read the dataset 
-                df = pd.read_csv(dataset.file_path) 
-
-                # Check if we have team and performance columns 
-                team_col = None 
-                if 'team' in df.columns: 
-                    team_col = 'team' 
-                elif 'team_id' in df.columns: 
-                    team_col = 'team_id' 
-
-                if team_col and 'performance' in df.columns: 
-                    # Group by team and calculate metrics 
-                    team_metrics = df.groupby(team_col).agg({
-                        'performance': 'mean',
-                        'employee_id': 'count'
-                    }).reset_index() 
-
-                    team_metrics.columns = [team_col, 'performance', 'size'] 
-
-                    # Add innovation if available 
-                    if 'innovation' in df.columns: 
-                        innovation = df.groupby(team_col)['innovation'].mean().reset_index() 
-                        team_metrics = team_metrics.merge(innovation, on=team_col) 
-                    else: 
-                        # Generate random innovation values 
-                        import random 
-                        team_metrics['innovation'] = team_metrics['performance'].apply(
-                            lambda x: max(50, min(90, x + random.randint(-10, 10)))
-                        )
-
-                    # Add communication level 
-                    def get_comm_level(size): 
-                        if size > 40: 
-                            return 'High' 
-                        elif size > 20: 
-                            return 'Medium' 
-                        else: 
-                            return 'Low' 
-
-                    team_metrics['communication'] = team_metrics['size'].apply(get_comm_level) 
-
-                    # Rename team column to 'name' 
-                    team_metrics = team_metrics.rename(columns={team_col: 'name'}) 
-
-                    # Convert to list of dictionaries 
-                    team_data = team_metrics.to_dict('records') 
-            except Exception as e: 
-                print(f"Error reading dataset file: {e}") 
-
-        # Return empty array if no team data is available
-        if not team_data:
-            team_data = []
-
+        # Get user's accessible organizations
+        accessible_orgs = db.query(UserOrganization.organization_id).filter_by(user_id=current_user.id).all()
+        accessible_org_ids = [o.organization_id for o in accessible_orgs]
+        
+        team_data = []
+        
+        if accessible_org_ids:
+            # Get all teams from accessible organizations
+            teams = db.query(Team).filter(Team.organization_id.in_(accessible_org_ids)).all()
+            
+            for team in teams:
+                # Count team members
+                team_size = db.query(Employee).filter(Employee.team_id == team.id).count()
+                
+                # Get performance metrics - use stored values or calculate
+                performance = team.performance_score if team.performance_score else 0
+                innovation = team.innovation_score if team.innovation_score else 0
+                
+                # Determine communication level based on team size
+                def get_comm_level(size):
+                    if size > 40:
+                        return 'High'
+                    elif size > 20:
+                        return 'Medium'
+                    else:
+                        return 'Low'
+                
+                communication = get_comm_level(team_size)
+                
+                # Add team data
+                team_data.append({
+                    "name": team.name,
+                    "performance": performance,
+                    "size": team_size,
+                    "communication": communication,
+                    "innovation": innovation
+                })
+        
         return team_data
 
     except Exception as e:
@@ -389,10 +326,6 @@ async def get_performance_drivers(
                         performance_drivers = drivers[:5] 
                 except json.JSONDecodeError: 
                     pass 
-
-        # Return empty array if no performance driver data is available
-        if not performance_drivers:
-            performance_drivers = []
 
         return performance_drivers
 

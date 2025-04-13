@@ -380,18 +380,35 @@ def delete_dataset(
             )
 
     try:
+        # Store dataset ID and type for later use
+        dataset_id_to_delete = dataset.id
+        dataset_type = dataset.dataset_type
+
         # Try to delete the physical file
         if os.path.exists(dataset.file_path):
             os.remove(dataset.file_path)
 
-        # Delete any references to this dataset
-        # (e.g., from models that were trained on it)
-        # This depends on your data model, but here's an example:
-        from app.models.research import Model, Citation
-        db.query(Citation).filter(Citation.dataset_id == dataset_id).delete(synchronize_session=False)
-        db.query(Model).filter(Model.dataset_id == dataset_id).update({"dataset_id": None}, synchronize_session=False)
+        # Delete references and handle orphans
+        from app.models.research import Model, Citation, Dataset as DatasetModel
 
-        # Delete the dataset record
+        # Nullify references in Models trained on this dataset
+        db.query(Model).filter(Model.dataset_id == dataset_id_to_delete).update({"dataset_id": None}, synchronize_session=False)
+
+        # Delete Citations pointing to this dataset
+        db.query(Citation).filter(Citation.dataset_id == dataset_id_to_delete).delete(synchronize_session=False)
+
+        # If deleting a SOURCE dataset, handle derived PROCESSED datasets
+        if dataset_type in ['organization', 'communication', 'performance']:
+            source_string = f"processed from dataset {dataset_id_to_delete}"
+            # Find processed datasets derived from this source
+            derived_datasets = db.query(DatasetModel).filter(DatasetModel.source == source_string).all()
+            for derived_ds in derived_datasets:
+                # Mark as having missing source
+                derived_ds.description = f"[Source Missing] {derived_ds.description}"
+                derived_ds.source = f"source deleted (was: {derived_ds.source})"
+                db.add(derived_ds)
+
+        # Delete the dataset record itself
         db.delete(dataset)
         db.commit()
 
