@@ -568,7 +568,23 @@ class OrganizationalPerformancePredictor:
                     'potential_target': bool(not df[col].isnull().all() and df[col].std() > 0 and df[col].isna().sum() < len(df) * 0.1)
                  }
 
-            target_keywords = ['performance', 'score', 'rating', 'outcome', 'result', 'satisfaction', 'turnover', 'productivity', 'efficiency']
+            target_keywords = [
+                # Performance related
+                'performance', 'score', 'rating', 'outcome', 'result', 'productivity', 'efficiency', 
+                'output', 'success', 'achievement', 'accomplishment', 'quality', 'kpi',
+                
+                # Employee satisfaction related
+                'satisfaction', 'happiness', 'engagement', 'morale', 'wellbeing', 'wellness',
+                'commitment', 'dedication', 'loyalty', 'retention',
+                
+                # Turnover related
+                'turnover', 'attrition', 'churn', 'departure', 'resignation', 'termination',
+                'leaving', 'quit', 'exit',
+                
+                # Innovation related
+                'innovation', 'creativity', 'invention', 'ideation', 'novel', 'breakthrough',
+                'improvement', 'development', 'initiative', 'suggestion'
+            ]
             potential_targets = [
                 col for col in numeric_cols
                 if col_stats.get(col) and col_stats[col].get('potential_target') # Check if stats exist and potential target is true

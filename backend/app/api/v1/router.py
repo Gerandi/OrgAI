@@ -1,7 +1,8 @@
 from fastapi import APIRouter 
 
 from app.api.v1.endpoints import auth, users, organizations, teams, employees, departments 
-from app.api.v1.endpoints import datasets, models, simulations, research, networks, activities, metrics 
+from app.api.v1.endpoints import datasets, models, simulations, research, networks, activities, metrics
+from app.api.v1.endpoints import feature_identification, communities 
 
 api_router = APIRouter() 
 
@@ -19,3 +20,5 @@ api_router.include_router(research.router, prefix="/research", tags=["research"]
 api_router.include_router(networks.router, prefix="/networks", tags=["networks"]) 
 api_router.include_router(activities.router, prefix="/activities", tags=["activities"]) 
 api_router.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
+api_router.include_router(feature_identification.router, prefix="/feature-identification", tags=["feature-identification"])
+api_router.include_router(communities.router, prefix="/communities", tags=["communities"])

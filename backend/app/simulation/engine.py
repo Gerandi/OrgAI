@@ -4,10 +4,12 @@ import networkx as nx
 import pickle 
 import os 
 import json 
-from typing import Dict, List, Optional, Union 
+from typing import Dict, List, Optional, Union, Any 
 from datetime import datetime 
 
 from app.ml.predictor import OrganizationalPerformancePredictor 
+from app.ml.model_explainer import ModelExplainer
+from app.network.community_detection import CommunityDetection
 from app.config.settings import settings 
 from app.simulation.parameters import default_parameters
 
@@ -29,6 +31,7 @@ class OrganizationalSimulationEngine:
         self.team_data = pd.DataFrame() 
         self.results = pd.DataFrame() 
         self.interventions = [] 
+        self.model_insights = [] # Track insights from model throughout simulation
 
         # Initialize with empty state 
         self.organization_graph = nx.Graph() 
@@ -351,7 +354,7 @@ class OrganizationalSimulationEngine:
             # Tenure increases naturally 
             self.team_data.loc[team_idx, "avg_tenure"] += 1/12 # Add one month 
 
-        # If we have a trained model, use it for predictions 
+        # If we have a trained model, use it for predictions and generate insights
         if self.model is not None: 
             try: 
                 # Match feature names with model features 
@@ -369,6 +372,23 @@ class OrganizationalSimulationEngine:
                         # Use model to predict performance 
                         evaluation = self.model.evaluate_team_structure(self.team_data) 
                         predicted_performances = evaluation["predictions"] 
+                        
+                        # Store model insights for this step
+                        try:
+                            # Generate additional model insights
+                            step_insights = ModelExplainer.explain_prediction(
+                                self.model,
+                                self.team_data,
+                                None # All teams
+                            )
+                            
+                            # Add month info to insights
+                            step_insights["month"] = self.current_step
+                            
+                            # Store insights
+                            self.model_insights.append(step_insights)
+                        except Exception as insight_error:
+                            print(f"Warning: Could not generate model insights: {str(insight_error)}")
 
                         # Update team performances based on model predictions, but maintain some randomness 
                         for team_idx, performance in enumerate(predicted_performances): 
@@ -379,6 +399,11 @@ class OrganizationalSimulationEngine:
                                 # Add a small random component 
                                 final_perf = min(100, max(40, blended_perf + np.random.normal(0, 2))) 
                                 self.team_data.loc[team_idx, "performance"] = final_perf 
+                                
+                                # Adjust other metrics based on model feature importance
+                                if self.model.feature_importances:
+                                    # Use feature importance to influence other metrics
+                                    self._adjust_metrics_based_on_features(team_idx)
             except Exception as e: 
                 print(f"Error using model for predictions: {str(e)}") 
 
@@ -396,7 +421,66 @@ class OrganizationalSimulationEngine:
         avg_satisfaction = self.team_data["satisfaction"].mean() 
         satisfaction_modifier = 1.5 - (avg_satisfaction / 100) # 1.5 at 0% satisfaction, 0.5 at 100% 
 
-        return monthly_turnover * satisfaction_modifier 
+        return monthly_turnover * satisfaction_modifier
+        
+    def _adjust_metrics_based_on_features(self, team_idx: int) -> None:
+        """
+        Adjust team metrics based on model feature importance.
+        
+        This function allows model insights to influence simulation dynamics beyond
+        just the performance metric, creating a more realistic and explainable simulation.
+        
+        Args:
+            team_idx: Index of team in team_data DataFrame
+        """
+        if not self.model or not hasattr(self.model, 'feature_importances'):
+            return
+            
+        # Get feature importances
+        importances = self.model.feature_importances
+        
+        # Define relationships between features and metrics
+        feature_metric_influences = {
+            # Format: "feature": {"metric": influence_weight}
+            "communication_density": {"innovation": 0.4, "satisfaction": 0.3},
+            "diversity_index": {"innovation": 0.5, "satisfaction": 0.2},
+            "avg_skill_level": {"innovation": 0.3, "performance": 0.2},
+            "training_hours": {"performance": 0.3, "innovation": 0.2},
+            "satisfaction": {"performance": 0.2, "turnover": -0.4},
+            # Add more relationships as needed
+        }
+        
+        # Apply influences
+        for feature, influences in feature_metric_influences.items():
+            # Skip if feature not in our model or team data
+            if feature not in importances or feature not in self.team_data.columns:
+                continue
+                
+            # Get feature importance and value
+            importance = importances[feature]
+            feature_value = self.team_data.loc[team_idx, feature]
+            
+            # Scale factor based on importance and value
+            # Higher values of important features have more impact
+            if isinstance(feature_value, (int, float)) and not pd.isna(feature_value):
+                # Normalize feature value to 0-1 scale based on typical ranges
+                normalized_value = min(1.0, feature_value / 10.0)  # Assuming most features range 0-10
+                
+                # Apply influences to each metric
+                for metric, weight in influences.items():
+                    if metric in self.team_data.columns:
+                        # Calculate adjustment
+                        adjustment = importance * weight * normalized_value * np.random.normal(1.0, 0.2)
+                        
+                        # Apply adjustment (different for turnover which is typically small)
+                        if metric == "turnover":
+                            # Small adjustment for turnover (which is a rate)
+                            self.team_data.loc[team_idx, metric] += adjustment * 0.01
+                        else:
+                            # Larger adjustment for other metrics (0-100 scale)
+                            current_value = self.team_data.loc[team_idx, metric]
+                            new_value = current_value + adjustment * 5.0  # Scale to make meaningful
+                            self.team_data.loc[team_idx, metric] = min(100, max(0, new_value)) 
 
     def get_summary_metrics(self) -> pd.DataFrame: 
         """ 
@@ -422,7 +506,8 @@ class OrganizationalSimulationEngine:
             "model_info": { 
                 "model_id": self.parameters.get("model_id"), 
                 "model_type": self.model.model_type if self.model else None, 
-                "feature_names": self.model.feature_names if self.model else None 
+                "feature_names": self.model.feature_names if self.model else None, 
+                "feature_importances": self.model.feature_importances if self.model and hasattr(self.model, 'feature_importances') else None
             } if self.model else {"model_id": None} 
         } 
 
@@ -451,6 +536,7 @@ class OrganizationalSimulationEngine:
                     "results": self.results, 
                     "interventions": self.interventions, 
                     "graph": self.organization_graph, 
+                    "model_insights": self.model_insights,
                     "saved_at": datetime.now().isoformat() 
                 }, f) 
 
@@ -507,7 +593,8 @@ class OrganizationalSimulationEngine:
             engine.team_data = data.get("team_data", pd.DataFrame()) 
             engine.results = data.get("results", pd.DataFrame()) 
             engine.interventions = data.get("interventions", []) 
-            engine.organization_graph = data.get("graph", nx.Graph()) 
+            engine.organization_graph = data.get("graph", nx.Graph())
+            engine.model_insights = data.get("model_insights", []) 
 
             # Load model if specified in parameters 
             model_id = engine.parameters.get("model_id") 
@@ -517,7 +604,73 @@ class OrganizationalSimulationEngine:
                 except Exception as e: 
                     print(f"Warning: Could not load model: {str(e)}") 
 
-            return engine 
-
+            return engine
+            
         except Exception as e: 
             raise ValueError(f"Error loading simulation from {file_path}: {str(e)}")
+            
+    def get_model_explanations(self) -> Dict[str, Any]:
+        """
+        Get explanations of model influence on simulation.
+        
+        Returns:
+            Dictionary with model explanations and insights
+        """
+        if not self.model:
+            return {"error": "No model loaded for this simulation"}
+            
+        try:
+            # Generate simulation dynamics explanation
+            dynamics_explanation = ModelExplainer.explain_simulation_dynamics(
+                self.results,
+                self.interventions,
+                self.team_data,
+                self.organization_graph,
+                self.model
+            )
+            
+            # Get most recent model insights
+            latest_insights = self.model_insights[-1] if self.model_insights else {}
+            
+            # Combine explanations
+            return {
+                "dynamics": dynamics_explanation,
+                "latest_insights": latest_insights,
+                "model_type": self.model.model_type if self.model else None,
+                "feature_importance": self.model.feature_importances if hasattr(self.model, 'feature_importances') else None
+            }
+        except Exception as e:
+            print(f"Error generating model explanations: {str(e)}")
+            return {"error": str(e)}
+            
+    def detect_communities(self, algorithm: str = "louvain", params: Optional[Dict] = None) -> Dict[str, Any]:
+        """
+        Detect communities in the organization network.
+        
+        Args:
+            algorithm: Community detection algorithm to use
+            params: Algorithm parameters
+            
+        Returns:
+            Dictionary with community detection results
+        """
+        if not self.organization_graph or len(self.organization_graph.nodes) == 0:
+            return {"error": "No organization graph available"}
+            
+        try:
+            # Use community detection module
+            communities = CommunityDetection.detect_communities(
+                self.organization_graph,
+                algorithm,
+                params
+            )
+            
+            # Add simulation context
+            communities["current_step"] = self.current_step
+            communities["num_teams"] = len(self.team_data)
+            
+            return communities
+            
+        except Exception as e:
+            print(f"Error detecting communities: {str(e)}")
+            return {"error": str(e)}

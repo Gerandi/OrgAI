@@ -1,15 +1,133 @@
-from typing import List, Optional 
+from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Body 
 from sqlalchemy.orm import Session 
 import json 
+import os
 
 from app.config.database import get_db 
 from app.config.auth import get_current_active_user 
 from app.models.user import User 
-from app.models.research import Simulation, ResearchProject, Model 
+from app.models.research import Simulation, ResearchProject, Model, Dataset 
 from app.simulation.engine import OrganizationalSimulationEngine 
+from app.schemas.simulation import SimulationCreate, SimulationRunRequest, ParameterGuideResponse 
 
 router = APIRouter() 
+
+@router.get("/parameter-guidance", response_model=ParameterGuideResponse)
+def get_parameter_guidance(
+    dataset_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get guidance for simulation parameters, optionally based on a specific dataset
+    """
+    from app.simulation.real_data_initializer import PARAMETER_RANGES, derive_parameters_from_data
+    import pandas as pd
+    import networkx as nx
+    
+    # Define parameter guides based on the parameter ranges
+    parameter_guides = [
+        {
+            "name": "team_size",
+            "description": "Average number of employees per team",
+            "min_value": PARAMETER_RANGES["team_size"][0],
+            "max_value": PARAMETER_RANGES["team_size"][1],
+            "default_value": 8
+        },
+        {
+            "name": "hierarchy_levels",
+            "description": "Number of organizational hierarchy levels",
+            "min_value": PARAMETER_RANGES["hierarchy_levels"][0],
+            "max_value": PARAMETER_RANGES["hierarchy_levels"][1],
+            "default_value": 3
+        },
+        {
+            "name": "communication_density",
+            "description": "Density of communication network (0.1-1.0)",
+            "min_value": PARAMETER_RANGES["communication_density"][0],
+            "max_value": PARAMETER_RANGES["communication_density"][1],
+            "default_value": 0.6
+        },
+        {
+            "name": "turnover_rate",
+            "description": "Annual employee turnover rate (1-50%)",
+            "min_value": PARAMETER_RANGES["turnover_rate"][0],
+            "max_value": PARAMETER_RANGES["turnover_rate"][1],
+            "default_value": 0.05
+        },
+        {
+            "name": "training_frequency",
+            "description": "How often training occurs",
+            "default_value": "quarterly",
+            "options": PARAMETER_RANGES["training_frequency"]
+        },
+        {
+            "name": "simulation_duration",
+            "description": "Duration of simulation in months",
+            "min_value": PARAMETER_RANGES["simulation_duration"][0],
+            "max_value": PARAMETER_RANGES["simulation_duration"][1],
+            "default_value": 12
+        },
+        {
+            "name": "simulation_mode",
+            "description": "Simulation mode: 'synthetic' (based only on parameters) or 'real_data' (initialized from actual data)",
+            "default_value": "synthetic",
+            "options": ["synthetic", "real_data"]
+        }
+    ]
+    
+    derived_parameters = {}
+    warnings = []
+    
+    # If a dataset_id is provided, try to derive parameters from it
+    if dataset_id:
+        try:
+            # Get dataset from DB
+            dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+            
+            if not dataset:
+                warnings.append(f"Dataset with ID {dataset_id} not found")
+            else:
+                # Check if user has access to the dataset
+                if dataset.project_id:
+                    from app.models.user import UserProject
+                    user_project = db.query(UserProject).filter_by(
+                        user_id=current_user.id, 
+                        project_id=dataset.project_id
+                    ).first()
+                    
+                    if not user_project:
+                        warnings.append(f"You don't have access to dataset {dataset_id}")
+                        dataset = None
+                
+                if dataset and os.path.exists(dataset.file_path):
+                    # Read the dataset
+                    df = pd.read_csv(dataset.file_path)
+                    
+                    # Create an empty graph for now
+                    G = nx.Graph()
+                    
+                    # Derive parameters from data
+                    derived_parameters = derive_parameters_from_data(df, G)
+                    
+                    # Update default values based on derived parameters
+                    for param in parameter_guides:
+                        if param["name"] in derived_parameters:
+                            param["default_value"] = derived_parameters[param["name"]]
+                            # Add a note that this value is derived from data
+                            param["description"] += " (derived from data)"
+                else:
+                    if dataset:
+                        warnings.append(f"Dataset file not found at path: {dataset.file_path}")
+        except Exception as e:
+            warnings.append(f"Error deriving parameters from dataset: {str(e)}")
+    
+    return {
+        "parameters": parameter_guides,
+        "derived_parameters": derived_parameters if derived_parameters else None,
+        "warnings": warnings if warnings else None
+    }
 
 @router.post("/", response_model=dict) 
 def create_simulation( 
@@ -314,6 +432,100 @@ def get_simulation(
     } 
 
 @router.get("/", response_model=List[dict]) 
+@router.get("/{simulation_id}/explanations", response_model=dict)
+def get_simulation_explanations(
+    simulation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get model explanations for a simulation
+    """
+    # Get simulation
+    simulation = db.query(Simulation).filter(Simulation.id == simulation_id).first()
+    if not simulation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Simulation not found"
+        )
+    
+    # Check project access if applicable
+    if simulation.project_id:
+        from app.models.user import UserProject
+        user_project = db.query(UserProject).filter_by(
+            user_id=current_user.id,
+            project_id=simulation.project_id
+        ).first()
+        if not user_project:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User does not have access to this simulation"
+            )
+    
+    # Load simulation and get explanations
+    try:
+        engine = OrganizationalSimulationEngine.load_simulation(simulation.results_path)
+        explanations = engine.get_model_explanations()
+        return {
+            "simulation_id": simulation.id,
+            "name": simulation.name,
+            "explanations": explanations
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting simulation explanations: {str(e)}"
+        )
+
+@router.post("/{simulation_id}/communities", response_model=dict)
+def detect_simulation_communities(
+    simulation_id: int,
+    algorithm: str = Body("louvain"),
+    parameters: Dict = Body({}),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Detect communities in the simulation's organization network
+    """
+    # Get simulation
+    simulation = db.query(Simulation).filter(Simulation.id == simulation_id).first()
+    if not simulation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Simulation not found"
+        )
+    
+    # Check project access if applicable
+    if simulation.project_id:
+        from app.models.user import UserProject
+        user_project = db.query(UserProject).filter_by(
+            user_id=current_user.id,
+            project_id=simulation.project_id
+        ).first()
+        if not user_project:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User does not have access to this simulation"
+            )
+    
+    # Load simulation and detect communities
+    try:
+        engine = OrganizationalSimulationEngine.load_simulation(simulation.results_path)
+        communities = engine.detect_communities(algorithm, parameters)
+        return {
+            "simulation_id": simulation.id,
+            "name": simulation.name,
+            "algorithm": algorithm,
+            "parameters": parameters,
+            "communities": communities
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error detecting communities: {str(e)}"
+        )
+
 def list_simulations( 
     project_id: Optional[int] = None, 
     skip: int = 0, 
@@ -365,4 +577,4 @@ def list_simulations(
             "created_at": sim.created_at 
         } 
         for sim in simulations 
-    ] 
+    ]
