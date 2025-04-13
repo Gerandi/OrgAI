@@ -52,6 +52,24 @@ def init_db():
             print("Created demo organization")
         else:
             print("Database already contains organizations")
+            
+        # Add user-organization link if it doesn't exist
+        from app.models.user import UserOrganization
+        user_org_link = db.query(UserOrganization).filter(
+            UserOrganization.user_id == demo_user.id,
+            UserOrganization.organization_id == demo_org.id
+        ).first()
+
+        if not user_org_link:
+            # Link demo user to demo organization as owner
+            user_org = UserOrganization(
+                user_id=demo_user.id,
+                organization_id=demo_org.id,
+                role="owner" # Owner role for full access
+            )
+            db.add(user_org)
+            db.commit()
+            print("Linked demo user to demo organization")
 
         # Create a demo project for testing
         if not db.query(ResearchProject).first():

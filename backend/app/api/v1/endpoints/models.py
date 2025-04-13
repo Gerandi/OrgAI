@@ -595,7 +595,9 @@ def update_model(
             detail=f"Error updating model: {str(e)}"
         )
 
-# Added POST endpoint for creating model records (e.g., after mock training)
+# IMPORTANT: This endpoint is for creating model records ONLY for externally trained models or mock models.
+# For regular user-initiated model training through the UI, the /models/train endpoint should be used, 
+# which performs actual training and creates the model record in one step.
 @router.post("/", response_model=dict)
 def create_model(
     model_data: dict = Body(...),
@@ -603,7 +605,9 @@ def create_model(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Create a new model record (e.g., after offline/mock training)
+    Create a new model record for EXTERNALLY trained models or mock models.
+    This endpoint should NOT be called directly from the main UI flow for model training.
+    For normal model training initiated via the UI, use the /models/train endpoint instead.
     """
     try:
         # Check if project_id is provided and user has access

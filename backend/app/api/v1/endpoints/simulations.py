@@ -44,6 +44,36 @@ def create_simulation(
 
     # Set parameters 
     parameters = simulation_data.get("parameters", {}) 
+    
+    # Check if we're initializing from a real dataset
+    dataset_id = simulation_data.get("dataset_id")
+    if dataset_id:
+        # Get the dataset to ensure user has access
+        from app.models.research import Dataset
+        dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+        if not dataset:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Dataset not found"
+            )
+        
+        # If dataset is part of a project, check access
+        if dataset.project_id:
+            from app.models.user import UserProject
+            dataset_access = db.query(UserProject).filter_by(
+                user_id=current_user.id,
+                project_id=dataset.project_id
+            ).first()
+            if not dataset_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User does not have access to this dataset"
+                )
+        
+        # Add dataset info to parameters
+        parameters["processed_dataset_id"] = dataset_id
+        parameters["simulation_mode"] = "real_data"
+    
     engine.set_parameters(parameters) 
 
     # Check if we should load a model 

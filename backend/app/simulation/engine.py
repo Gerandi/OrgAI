@@ -9,6 +9,7 @@ from datetime import datetime
 
 from app.ml.predictor import OrganizationalPerformancePredictor 
 from app.config.settings import settings 
+from app.simulation.parameters import default_parameters
 
 class OrganizationalSimulationEngine: 
     """ 
@@ -20,16 +21,7 @@ class OrganizationalSimulationEngine:
         Initialize simulation engine with default parameters. 
         """ 
         # Default simulation parameters 
-        self.parameters = { 
-            "team_size": 8, 
-            "hierarchy_levels": 3, 
-            "communication_density": 0.6, 
-            "turnover_rate": 0.05, # 5% annual turnover 
-            "training_frequency": "quarterly", 
-            "simulation_duration": 12, # months 
-            "random_seed": 42, 
-            "model_id": None # Will use a loaded model if specified 
-        } 
+        self.parameters = default_parameters.copy()
 
         # Simulation state 
         self.current_step = 0 
@@ -101,16 +93,44 @@ class OrganizationalSimulationEngine:
 
     def initialize_organization(self): 
         """ 
-        Initialize the organization structure based on parameters. 
+        Initialize the organization structure based on parameters or real dataset.
         """ 
-        # Create organization graph 
-        team_size = self.parameters.get("team_size", 8) 
-        hierarchy_levels = self.parameters.get("hierarchy_levels", 3) 
-        communication_density = self.parameters.get("communication_density", 0.6) 
+        # Check if we should initialize from a real dataset
+        simulation_mode = self.parameters.get("simulation_mode", "synthetic")
+        processed_dataset_id = self.parameters.get("processed_dataset_id")
+        
+        if simulation_mode == "real_data" and processed_dataset_id:
+            try:
+                # Import real data initializer here to avoid circular imports
+                from app.simulation.real_data_initializer import initialize_from_dataset
+                
+                # Initialize from the real dataset
+                init_data = initialize_from_dataset(processed_dataset_id, self.parameters)
+                
+                # Set simulation state from real data
+                self.team_data = init_data["team_data"]
+                self.organization_graph = init_data["organization_graph"]
+                self.org_data = init_data["org_data"]
+                self.results = init_data["results"]
+                self.current_step = 0
+                
+                print(f"Initialized simulation from dataset {processed_dataset_id}")
+                return
+            except Exception as e:
+                print(f"Error initializing from dataset: {str(e)}")
+                print("Falling back to synthetic data generation")
+        
+        # If we get here, use synthetic data generation
+        print("Initializing with synthetic data...")
+        
+        # Create organization graph
+        team_size = self.parameters.get("team_size", 8)
+        hierarchy_levels = self.parameters.get("hierarchy_levels", 3)
+        communication_density = self.parameters.get("communication_density", 0.6)
 
-        # Generate team-level data for simulation 
-        teams_data = [] 
-        num_teams = max(5, int(hierarchy_levels * 3)) 
+        # Generate team-level data for simulation
+        teams_data = []
+        num_teams = max(5, int(hierarchy_levels * 3))
 
         for i in range(num_teams): 
             # Create team with random but reasonable values 
@@ -500,4 +520,4 @@ class OrganizationalSimulationEngine:
             return engine 
 
         except Exception as e: 
-            raise ValueError(f"Error loading simulation from {file_path}: {str(e)}") 
+            raise ValueError(f"Error loading simulation from {file_path}: {str(e)}")
