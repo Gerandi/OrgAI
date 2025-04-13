@@ -303,6 +303,7 @@ async def train_model(
             name=training_data.get("name", f"{target_column} Prediction Model"),
             description=training_data.get("description", f"Trained {model_type} model for predicting {target_column}"),
             project_id=dataset.project_id,
+            created_by_user_id=current_user.id, # Set the creator of the model
             model_type=model_type,
             file_path=model_path,
             dataset_id=dataset_id,
@@ -615,6 +616,7 @@ def create_model(
             name=model_data.get("name", "New Model"),
             description=model_data.get("description", ""),
             project_id=project_id,
+            created_by_user_id=current_user.id, # Set the creator of the model
             model_type=model_data.get("model_type"),
             file_path=model_data.get("file_path"), # May not exist for mock
             dataset_id=model_data.get("dataset_id"),

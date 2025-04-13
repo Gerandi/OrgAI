@@ -50,11 +50,17 @@ def get_project_activities(
             .all() 
 
         for dataset in datasets: 
-            # Find the user who created it 
-            dataset_creator = db.query(User)\
-                .join(UserProject, User.id == UserProject.user_id)\
-                .filter(UserProject.project_id == project_id)\
-                .first() # Simplified version - ideally you'd store creator info 
+            # Get the creator of the dataset
+            dataset_creator = None
+            if dataset.created_by_user_id:
+                dataset_creator = db.query(User).filter(User.id == dataset.created_by_user_id).first()
+            
+            # Fallback to project members if creator not recorded
+            if not dataset_creator:
+                dataset_creator = db.query(User)\
+                    .join(UserProject, User.id == UserProject.user_id)\
+                    .filter(UserProject.project_id == project_id)\
+                    .first()
 
             activities.append({ 
                 "id": f"dataset-{dataset.id}", 
@@ -74,11 +80,17 @@ def get_project_activities(
             .all() 
 
         for model in models: 
-            # Find the user who created it 
-            model_creator = db.query(User)\
-                .join(UserProject, User.id == UserProject.user_id)\
-                .filter(UserProject.project_id == project_id)\
-                .first() # Simplified version 
+            # Get the creator of the model
+            model_creator = None
+            if model.created_by_user_id:
+                model_creator = db.query(User).filter(User.id == model.created_by_user_id).first()
+            
+            # Fallback to project members if creator not recorded
+            if not model_creator:
+                model_creator = db.query(User)\
+                    .join(UserProject, User.id == UserProject.user_id)\
+                    .filter(UserProject.project_id == project_id)\
+                    .first() 
 
             activities.append({ 
                 "id": f"model-{model.id}", 
@@ -98,11 +110,17 @@ def get_project_activities(
             .all() 
 
         for publication in publications: 
-            # Find the user who created it 
-            publication_creator = db.query(User)\
-                .join(UserProject, User.id == UserProject.user_id)\
-                .filter(UserProject.project_id == project_id)\
-                .first() # Simplified version 
+            # Get the creator of the publication
+            publication_creator = None
+            if publication.created_by_user_id:
+                publication_creator = db.query(User).filter(User.id == publication.created_by_user_id).first()
+            
+            # Fallback to project members if creator not recorded
+            if not publication_creator:
+                publication_creator = db.query(User)\
+                    .join(UserProject, User.id == UserProject.user_id)\
+                    .filter(UserProject.project_id == project_id)\
+                    .first() 
 
             activities.append({ 
                 "id": f"publication-{publication.id}", 

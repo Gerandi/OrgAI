@@ -122,10 +122,7 @@ def add_team_employee(
     db.commit()
     db.refresh(employee)
 
-    # Update team size after adding employee
-    team.team_size = db.query(Employee).filter(Employee.team_id == team_id).count()
-    db.add(team)
-    db.commit()
+    # Team size is now calculated dynamically, no need to update the team record
 
     return {
         "id": employee.id,
@@ -184,10 +181,7 @@ def remove_team_employee(
     db.add(employee)
     db.commit()
 
-    # Update team size after removing employee
-    team.team_size = db.query(Employee).filter(Employee.team_id == team_id).count()
-    db.add(team)
-    db.commit()
+    # Team size is now calculated dynamically, no need to update the team record
 
     return {"message": "Employee removed from team successfully"}
 
@@ -346,8 +340,7 @@ def create_team(
         name=team_data["name"],
         description=team_data.get("description"),
         organization_id=org_id,
-        department_id=dept_id,
-        team_size=0 # Initial size is 0
+        department_id=dept_id
         # Team lead is not set at creation, maybe update later
     )
 
@@ -355,13 +348,16 @@ def create_team(
     db.commit()
     db.refresh(team)
 
+    # Calculate team size
+    employee_count = db.query(Employee).filter(Employee.team_id == team.id).count()
+
     return {
         "id": team.id,
         "name": team.name,
         "description": team.description,
         "organization_id": team.organization_id,
         "department_id": team.department_id,
-        "team_size": team.team_size,
+        "team_size": employee_count, # Dynamically calculated
         "created_at": team.created_at,
         "updated_at": team.updated_at
     }
@@ -445,10 +441,8 @@ def update_team(
     db.commit()
     db.refresh(team)
 
-    # Recalculate team size
+    # Calculate team size for response
     employee_count = db.query(Employee).filter(Employee.team_id == team_id).count()
-    team.team_size = employee_count # Update size in the model if needed, though not strictly necessary for response
-    db.commit()
 
     # Get team lead name if exists
     team_lead_name = None

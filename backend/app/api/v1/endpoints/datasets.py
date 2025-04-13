@@ -201,6 +201,7 @@ async def upload_dataset(
         name=dataset_name,
         description=description or f"Uploaded {file_type} data",
         project_id=project_id, # This can be None for personal uploads
+        created_by_user_id=current_user.id, # Set the creator of the dataset
         file_path=file_path,
         format=file_extension.lstrip('.'),
         size_bytes=file_size,
@@ -500,6 +501,7 @@ async def process_dataset(
             name=os.path.splitext(output_name)[0],
             description=dataset_description,
             project_id=process_options.get('project_id', dataset.project_id),
+            created_by_user_id=current_user.id, # Set the creator of the dataset
             file_path=output_path,
             format="csv",
             size_bytes=os.path.getsize(output_path),

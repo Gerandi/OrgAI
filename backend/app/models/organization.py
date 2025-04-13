@@ -46,7 +46,7 @@ class Team(BaseModel):
     description = Column(String, nullable=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"))
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
-    team_size = Column(Integer, default=0)
+    # team_size column removed - will be calculated dynamically
     team_lead_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
 
     # Performance metrics

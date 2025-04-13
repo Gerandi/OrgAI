@@ -30,6 +30,7 @@ class Dataset(BaseModel):
     name = Column(String, index=True)
     description = Column(Text, nullable=True)
     project_id = Column(Integer, ForeignKey("research_projects.id"))
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Added field
     file_path = Column(String) # Path to stored dataset file
     format = Column(String) # csv, json, etc.
     size_bytes = Column(Integer)
@@ -47,6 +48,7 @@ class Dataset(BaseModel):
 
     # Relationships
     project = relationship("ResearchProject", back_populates="datasets")
+    creator = relationship("User")  # Relationship to the user who created this dataset
 
 class Model(BaseModel):
     """ML model for research projects"""
@@ -55,6 +57,7 @@ class Model(BaseModel):
     name = Column(String, index=True)
     description = Column(Text, nullable=True)
     project_id = Column(Integer, ForeignKey("research_projects.id"))
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Added field
     model_type = Column(String) # random_forest, neural_network, etc.
     file_path = Column(String) # Path to stored model file
     version = Column(String, default="1.0.0")
@@ -79,6 +82,7 @@ class Model(BaseModel):
     # Relationships
     project = relationship("ResearchProject", back_populates="models")
     dataset = relationship("Dataset")
+    creator = relationship("User")  # Relationship to the user who created this model
 
 class Simulation(BaseModel):
     """Simulation for research projects"""
@@ -107,6 +111,7 @@ class Publication(BaseModel):
     title = Column(String, index=True)
     abstract = Column(Text, nullable=True)
     project_id = Column(Integer, ForeignKey("research_projects.id"))
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Added field
     authors = Column(String) # Comma-separated list of authors
 
     # Publication details
@@ -121,6 +126,7 @@ class Publication(BaseModel):
 
     # Relationships
     project = relationship("ResearchProject", back_populates="publications")
+    creator = relationship("User")  # Relationship to the user who created this publication
 
 class Citation(BaseModel):
     """Citation tracking for datasets, models and publications"""
