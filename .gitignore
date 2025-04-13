@@ -62,6 +62,17 @@ yarn-error.log*
 # Model storage
 /model_storage/
 /simulations/
+/models/
+*.model
+*.pkl
+*.joblib
+*.h5
+*.onnx
+*.pt
+*.bin
+*.weights
+/checkpoints/
+/saved_models/
 
 # Logs
 logs/
